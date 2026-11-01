@@ -159,6 +159,7 @@ fun AppMenu(
     onBootTarget: (String) -> Unit,
     /** What is plugged into a pinned input, by its input id; null puts the input's own tile back. */
     onSourceDevice: (String, SourceDevice?) -> Unit,
+    onSourceNote: (String) -> Unit,
     /** Into folder id, or a new folder when null. */
     onToFolder: (String, String?) -> Unit,
     onOutOfFolder: (String) -> Unit,
@@ -246,8 +247,9 @@ fun AppMenu(
                             } else {
                                 MenuRow(Glyph.Move, stringResource(R.string.menu_move), { onMove(shownApp.key) }, focusRequester = first)
                             }
-                            MenuRow(Glyph.Folder, stringResource(R.string.menu_to_folder), { page = MenuPage.Folders }, trailing = "›")
+                            if (shownApp.source == null) MenuRow(Glyph.Folder, stringResource(R.string.menu_to_folder), { page = MenuPage.Folders }, trailing = "›")
                             if (shownApp.source != null) {
+                                MenuRow(Glyph.Pencil, stringResource(R.string.source_note_title), { onSourceNote(shownApp.key) })
                                 // A pinned TV input: no app info or uninstall, and "remove" unpins it.
                                 MenuRow(Glyph.Input, stringResource(R.string.menu_source_device), { page = MenuPage.Device }, trailing = "›")
                                 if (customIcon) {

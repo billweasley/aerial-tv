@@ -13,9 +13,10 @@ export ANDROID_SERIAL="$SERIAL"
 adb connect "$SERIAL" >/dev/null
 
 # First take away what lets Aerial switch the guard back on, or it would simply do so.
-adb shell am broadcast -a "$PKG.CONFIG" -n "$PKG/.guard.ConfigReceiver" --ez keep_adb false --ez own_screensaver false >/dev/null 2>&1 || true
+adb shell am broadcast -a "$PKG.CONFIG" -n "$PKG/.guard.ConfigReceiver" --ez keep_adb false --ez own_screensaver false --ez capture_home_key false >/dev/null 2>&1 || true
 adb shell cmd notification disallow_listener "$PKG/$PKG.guard.RevivalListener" >/dev/null 2>&1 || true
 adb shell pm revoke "$PKG" android.permission.WRITE_SECURE_SETTINGS >/dev/null 2>&1 || true
+adb shell pm revoke "$PKG" android.permission.READ_TV_LISTINGS >/dev/null 2>&1 || true
 adb shell appops set "$PKG" SYSTEM_ALERT_WINDOW default >/dev/null 2>&1 || true
 adb shell appops set "$PKG" REQUEST_INSTALL_PACKAGES default >/dev/null 2>&1 || true
 adb shell appops set "$PKG" GET_USAGE_STATS default >/dev/null 2>&1 || true
@@ -28,6 +29,19 @@ adb shell appops set "$PKG" ACCESS_RESTRICTED_SETTINGS default >/dev/null 2>&1 |
 adb shell am force-stop "$PKG"
 case "$(adb shell settings get secure screensaver_components | tr -d '\r')" in
   "$PKG"/*) adb shell settings put secure screensaver_components "$(adb shell settings get secure screensaver_default_component | tr -d '\r')" ;;
+esac
+# The custom setup can stop HyperOS's separate idle timer while Aerial supplies the screensaver.
+# Keep the previous value on the TV so restoration also works after Aerial was uninstalled.
+XIAOMI_SAVER=$(adb shell settings get global aerial_previous_xiaomi_screen_saver_timeout | tr -d '\r')
+case "$XIAOMI_SAVER" in
+  ''|null) ;;
+  *[!0-9-]*) echo "Invalid saved Xiaomi screensaver timeout; left unchanged." >&2 ;;
+  *)
+    if [ "$(adb shell settings get system screen_saver_timeout | tr -d '\r')" = -1 ]; then
+      adb shell settings put system screen_saver_timeout "$XIAOMI_SAVER"
+    fi
+    adb shell settings delete global aerial_previous_xiaomi_screen_saver_timeout >/dev/null
+    ;;
 esac
 
 CURRENT=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')

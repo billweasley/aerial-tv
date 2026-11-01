@@ -13,6 +13,7 @@ import app.orchard.tv.guard.GuardSetup
 import app.orchard.tv.system.DeviceClass
 import app.orchard.tv.wallpaper.AerialQuality
 import java.security.MessageDigest
+import org.json.JSONArray
 
 /**
  * How the focused app shows itself, named after tvOS's Accessibility > Increase Contrast > Focus Style.
@@ -67,6 +68,8 @@ object AerialSettings {
 
     /** TV inputs pinned to Home as tiles, by TvInputInfo id. */
     var pinnedSources by mutableStateOf<Set<String>>(emptySet()); private set
+    var sourceOrder by mutableStateOf<List<String>>(emptyList()); private set
+    const val MAX_HOME_SOURCES = 3
 
     /**
      * The input to open when the TV is switched on (a set-top box, an Apple TV), by TvSource id;
@@ -107,6 +110,7 @@ object AerialSettings {
 
     /** The Liquid Glass plate under the top row; some prefer the apps straight on the wallpaper (#151). */
     var homePlate by mutableStateOf(true); private set
+    var glassTransparency by mutableIntStateOf(0); private set
 
     /** The clock, with the date and weather, in the top right instead of the top left. */
     var clockRight by mutableStateOf(false); private set
@@ -184,7 +188,11 @@ object AerialSettings {
         app = context.applicationContext
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         focusStyle = FocusStyle.of(prefs.getString("focus_style", null))
-        pinnedSources = prefs.getStringSet("pinned_sources", null)?.toSet() ?: emptySet()
+        sourceOrder = runCatching {
+            val list = JSONArray(prefs.getString("source_order", "[]") ?: "[]")
+            (0 until list.length()).map { list.getString(it) }.distinct()
+        }.getOrDefault(emptyList())
+        pinnedSources = prefs.getStringSet("pinned_sources", null)?.take(MAX_HOME_SOURCES)?.toSet() ?: emptySet()
         bootSource = prefs.getString("boot_source", null)
         bootApp = prefs.getString("boot_app", null)
         pinHash = prefs.getString("pin_hash", null)
@@ -196,6 +204,7 @@ object AerialSettings {
         clockRight = prefs.getBoolean("clock_right", false)
         largeClock = prefs.getBoolean("large_clock", false)
         homePlate = prefs.getBoolean("home_plate", true)
+        glassTransparency = prefs.getInt("glass_transparency", 0).coerceIn(0, 75)
         showAllNames = prefs.getBoolean("show_all_names", false)
         wallpaperAlwaysMoves = prefs.getBoolean("wallpaper_always_moves", false)
         showWeather = prefs.getBoolean("show_weather", true)
@@ -324,15 +333,39 @@ object AerialSettings {
         GuardSetup.setSystemScreensaverOff(app, minutes == NEVER)
     }
 
-    fun setPinned(inputId: String, pinned: Boolean) {
+    fun setPinned(inputId: String, pinned: Boolean): Boolean {
+        if (pinned && inputId !in pinnedSources && pinnedSources.size >= MAX_HOME_SOURCES) return false
         pinnedSources = if (pinned) pinnedSources + inputId else pinnedSources - inputId
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putStringSet("pinned_sources", pinnedSources) }
+        return true
+    }
+
+    /** Discovery order is the default; a saved arrangement remains authoritative on reconnect. */
+    fun orderedSourceIds(available: List<String>): List<String> =
+        sourceOrder.filter { it in available } + available.filter { it !in sourceOrder }.distinct()
+
+    fun moveSource(inputId: String, targetId: String, available: List<String>): Boolean {
+        if (inputId !in available || targetId !in available) return false
+        if (inputId == targetId) return true
+        val order = orderedSourceIds(available).toMutableList()
+        val from = order.indexOf(inputId)
+        val to = order.indexOf(targetId)
+        order.removeAt(from)
+        order.add(order.indexOf(targetId).let { if (from < to) it + 1 else it }, inputId)
+        sourceOrder = order + sourceOrder.filter { it !in available }
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString("source_order", JSONArray(sourceOrder).toString()) }
+        return true
     }
 
 
     fun chooseEffects(choice: Effects) {
         effects = choice
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString("effects", choice.key) }
+    }
+
+    fun chooseGlassTransparency(percent: Int) {
+        glassTransparency = percent.coerceIn(0, 75)
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putInt("glass_transparency", glassTransparency) }
     }
 
     fun chooseFocusStyle(style: FocusStyle) {

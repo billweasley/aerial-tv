@@ -29,6 +29,7 @@ import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.system.Brightness
 import app.orchard.tv.system.DiagLog
 import app.orchard.tv.system.HomeStatus
+import app.orchard.tv.system.HdmiDeviceNames
 import app.orchard.tv.system.NetworkStatus
 import app.orchard.tv.system.SourceKind
 import app.orchard.tv.system.SystemProbe
@@ -53,7 +54,7 @@ private const val POLL_QUIET_MS = 400L
 
 sealed interface Overlay {
     data object None : Overlay
-    data class ControlCenter(val page: CcPage = CcPage.Main) : Overlay
+    data class ControlCenter(val page: CcPage = CcPage.Main, val fromHomeInputs: Boolean = false) : Overlay
     /** [inFolder]: the menu was opened inside that folder, and closes back to it. */
     data class AppMenu(val key: String, val anchor: Rect, val inFolder: String? = null) : Overlay
     data class Folder(val id: String) : Overlay
@@ -155,6 +156,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private var loadJob: Job? = null
+    private var sourceProbeJob: Job? = null
+    private val personalizeAction: () -> Unit = { whenUnlocked { overlay = Overlay.Wallpaper } }
 
     /** A tile picture set or removed from the phone page; see CustomIcons.onChange; before init, which registers it. */
     private val customIconsChanged: () -> Unit = {
@@ -166,6 +169,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         AppCatalog.renameFolder = ::renameFolder
         AppCatalog.pinSource = ::pinSourceById
         AppCatalog.layout = layoutOps
+        AppCatalog.openPersonalize = personalizeAction
         reload()
         // The light engine is written off the main thread: a held key repeats every few tens of ms,
         // and doing the HAL call on the key's own thread left the row lagging behind the picture.
@@ -179,6 +183,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         offerSetupOnce()
         // An input's device or name, chosen from its tile's menu or the phone page.
         viewModelScope.launch { snapshotFlow { SourceLooks.all }.drop(1).collect { if (loaded) arrange() } }
+        viewModelScope.launch { snapshotFlow { HdmiDeviceNames.revision }.drop(1).collect { refreshSources() } }
         // An app renamed on the phone page.
         viewModelScope.launch { snapshotFlow { AppNames.all }.drop(1).collect { if (loaded) arrange() } }
         viewModelScope.launch { snapshotFlow { AerialSettings.previewApps }.drop(1).collect { if (loaded) arrange() } }
@@ -327,9 +332,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun arrange() {
-        // Pinned TV inputs share the grid, order and hiding with the apps.
-        val pinned = sources.filter { it.id in AerialSettings.pinnedSources }.map { sourceEntry(context, it) }
-        AppCatalog.pinnedSources = pinned
+        // Inputs live together in Home's input card; keep pin preferences for its preview.
+        // Every grouped input remains editable by name/device on the phone, pinned or not.
+        AppCatalog.pinnedSources = sources.map { sourceEntry(context, it) }
         AppCatalog.sources = sources
         // The inputs Android itself lists can play behind Home through a TvView; the ones Aerial
         // makes up for TCL, Skyworth and the like open only in the maker's own player.
@@ -339,7 +344,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         )
         // Names typed on the phone page stand in for the apps' own, everywhere Home shows one.
         val named = all.map { e -> AppNames.of(e.key)?.let { e.copy(label = it) } ?: e }
-        val arrangement = store.arrange(named + pinned) { folder, inside ->
+        val arrangement = store.arrange(named) { folder, inside ->
             val shown = inside.take(9).map { it.art }
             val art = folderArt[folder.id]?.takeIf { (made, _) -> made.size == shown.size && made.indices.all { made[it] === shown[it] } }?.second
                 ?: TileArtFactory.forFolder(shown).also { folderArt[folder.id] = shown to it }
@@ -356,6 +361,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** An app or folder on Home, or an app inside a folder. */
     fun entry(key: String): AppEntry? = apps.firstOrNull { it.key == key } ?: folderApps.values.flatten().firstOrNull { it.key == key }
+        ?: AppCatalog.pinnedSources.firstOrNull { it.key == key }
 
     /** The folders on Home, in order, for "Move to Folder". */
     fun folders() = store.folders()
@@ -436,22 +442,17 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The phone page pins by input id. */
-    private fun pinSourceById(id: String, pinned: Boolean) {
-        sources.firstOrNull { it.id == id }?.let { setSourcePinned(it, pinned) }
-    }
+    private fun pinSourceById(id: String, pinned: Boolean): Boolean =
+        sources.firstOrNull { it.id == id }?.let { setSourcePinned(it, pinned) } ?: false
 
     /** Pins a TV input to Home (as the first tile, where it is easiest to reach) or takes it off. */
-    fun setSourcePinned(source: TvSource, pinned: Boolean) {
-        AerialSettings.setPinned(source.id, pinned)
-        arrange()
-        if (pinned) {
-            val key = apps.firstOrNull { it.source?.id == source.id }?.key
-            val first = apps.firstOrNull()?.key
-            if (key != null && first != null && key != first) {
-                store.move(key, first)
-                arrange()
-            }
+    fun setSourcePinned(source: TvSource, pinned: Boolean): Boolean {
+        if (!AerialSettings.setPinned(source.id, pinned)) {
+            notify(context.getString(R.string.notice_source_limit))
+            return false
         }
+        arrange()
+        return true
     }
 
     fun refreshSystem() {
@@ -469,7 +470,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             network = n; volume = v
             // TvSource holds an Intent, which has no value equality; compare what a tile shows.
             // The route too: a corrected Xiaomi source id changes nothing a tile shows.
-            fun shown(list: List<TvSource>) = list.map { listOf(it.id, it.label, it.deviceName, it.intent.toUri(0)) }
+            fun shown(list: List<TvSource>) = list.map { listOf(it.id, it.label, it.deviceName, it.dynamicSpd.toString(), it.connected.toString(), it.intent.toUri(0)) }
             if (shown(s) != shown(sources)) { sources = s; arrange() } else sources = s
             brightness = level
         }
@@ -488,10 +489,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * stays in front, so nothing re-probed it (PR #507, by Sakurasan, checked on that TV).
      */
     fun refreshSources() {
-        viewModelScope.launch {
+        if (sourceProbeJob?.isActive == true) return
+        sourceProbeJob = viewModelScope.launch {
             val ctx = context
             val s = withContext(Dispatchers.Default) { SystemProbe.sources(ctx) }
-            if (s.isNotEmpty() && sources.isEmpty()) { sources = s; arrange() }
+            val before = sources.map { listOf(it.id, it.label, it.deviceName, it.dynamicSpd.toString(), it.connected.toString()) }
+            val after = s.map { listOf(it.id, it.label, it.deviceName, it.dynamicSpd.toString(), it.connected.toString()) }
+            if (after != before) { sources = s; arrange() }
         }
     }
 
@@ -575,6 +579,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Moves the app being moved by [delta] slots in the visible grid. */
     fun moveBy(delta: Int) {
         val key = movingKey ?: return
+        if (key.startsWith(SOURCE_KEY_PREFIX)) {
+            val all = sources.map { it.id }
+            val shown = AerialSettings.orderedSourceIds(all).filter { it in AerialSettings.pinnedSources }.take(AerialSettings.MAX_HOME_SOURCES)
+            val id = key.removePrefix(SOURCE_KEY_PREFIX)
+            val at = shown.indexOf(id)
+            if (at < 0 || shown.isEmpty()) return
+            val to = (at + delta.coerceIn(-1, 1)).coerceIn(0, shown.lastIndex)
+            AerialSettings.moveSource(id, shown[to], all)
+            return
+        }
         val from = apps.indexOfFirst { it.key == key }
         if (from < 0) return
         val to = (from + delta).coerceIn(0, apps.lastIndex)
@@ -602,6 +616,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (AppCatalog.renameFolder == ::renameFolder) AppCatalog.renameFolder = null
         if (AppCatalog.pinSource == ::pinSourceById) AppCatalog.pinSource = null
         if (AppCatalog.layout === layoutOps) AppCatalog.layout = null
+        if (AppCatalog.openPersonalize === personalizeAction) AppCatalog.openPersonalize = null
     }
 }
 

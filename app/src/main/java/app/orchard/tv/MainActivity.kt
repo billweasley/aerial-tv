@@ -961,6 +961,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun open(intent: Intent) {
+        openedAppSinceHome = true
         try {
             SystemProbe.startSettingsIntent(this, intent)
         } catch (e: Exception) {

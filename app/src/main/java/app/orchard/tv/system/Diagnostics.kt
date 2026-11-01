@@ -141,6 +141,7 @@ object Diagnostics {
         appendLine()
         appendLine("**Inputs**")
         appendLine("```")
+        appendLine("Dynamic SPD enabled=${HdmiSpdSources.enabled(context)}; RX status=${HdmiSpdSources.status}")
         inputs(context).forEach { appendLine(it) }
         SystemProbe.sources(context).forEach { s ->
             appendLine("  shown: ${s.label} [${s.kind}] connected=${s.connected} -> ${s.intent.component?.flattenToShortString() ?: s.intent.data}" +

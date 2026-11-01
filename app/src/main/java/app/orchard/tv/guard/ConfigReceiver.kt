@@ -40,6 +40,36 @@ import kotlinx.coroutines.launch
  */
 class ConfigReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        intent.getStringExtra("spd_sources")?.let {
+            resultData = app.orchard.tv.system.HdmiSpdSources.configure(context, it)
+            return
+        }
+        if (intent.getBooleanExtra("spd_probe", false)) {
+            SystemProbe.sources(context)
+            resultData = org.json.JSONObject(app.orchard.tv.system.HdmiSpdSources.status).toString()
+            return
+        }
+        if (intent.hasExtra("capture_home_key")) {
+            GuardSetup.setCaptureHomeKey(context, intent.getBooleanExtra("capture_home_key", false))
+        }
+        if (intent.getBooleanExtra("personalize", false)) {
+            app.orchard.tv.apps.AppCatalog.openPersonalize?.invoke()
+            resultData = "Personalization requested"
+            return
+        }
+        intent.getStringExtra("recommendation_package")?.let {
+            resultData = app.orchard.tv.system.TvRecommendations.inspect(context, it)
+            return
+        }
+        intent.getStringExtra("hdmi_snapshot")?.let {
+            resultData = app.orchard.tv.system.HdmiDeviceNames.importSnapshot(context, it)
+            return
+        }
+        if (intent.getBooleanExtra("cec_probe", false)) {
+            app.orchard.tv.system.HdmiDeviceNames.read(context)
+            resultData = app.orchard.tv.system.HdmiDeviceNames.status
+            return
+        }
         // ... --es export_tiles <name>   (every tile on one picture; see TileSheet)
         // Runs on past the broadcast's time limit; Home keeps the process alive. Look for the file.
         intent.getStringExtra("export_tiles")?.takeIf { Regex("^[A-Za-z0-9_-]+$").matches(it) }?.let { name ->
@@ -69,6 +99,8 @@ class ConfigReceiver : BroadcastReceiver() {
             resultData = org.json.JSONArray(all.map { s ->
                 org.json.JSONObject().put("id", s.id).put("label", s.label).put("kind", s.kind.name)
                     .put("shown", s.id in shown).apply {
+                        put("connected", s.connected)
+                        s.deviceName?.let { put("deviceName", it) }
                         s.hardware?.let { put("hw", it) }
                         s.firmwareLabel?.let { put("firmwareLabel", it) }
                         s.xiaomiInput?.let { put("xiaomiInput", it) }
@@ -109,6 +141,10 @@ class ConfigReceiver : BroadcastReceiver() {
         if (intent.hasExtra("home_columns")) {
             AerialSettings.init(context)
             AerialSettings.chooseHomeColumns(intent.getIntExtra("home_columns", 5))
+        }
+        if (intent.hasExtra("glass_transparency")) {
+            AerialSettings.init(context)
+            AerialSettings.chooseGlassTransparency(intent.getIntExtra("glass_transparency", 0))
         }
         // ... --ez diag true / --ez mode_switch false / --ez soft_layer true   (see DiagLog;
         //                                 the last two apply the next time Home starts)

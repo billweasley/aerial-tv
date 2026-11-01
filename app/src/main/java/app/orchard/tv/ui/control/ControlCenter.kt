@@ -122,11 +122,12 @@ fun ControlCenter(
     /** Draw the closed panel once, nearly transparent, so that its first opening is not its first draw (HomeScreen). */
     warm: Boolean = false,
 ) {
+    val fromHomeInputs = (vm.overlay as? Overlay.ControlCenter)?.fromHomeInputs == true
     BackHandler(enabled = visible) {
         when (page) {
             CcPage.Main -> onClose()
-            CcPage.Inputs -> vm.overlay = Overlay.ControlCenter(CcPage.Main)
-            CcPage.InputSettings -> vm.overlay = Overlay.ControlCenter(CcPage.Inputs)
+            CcPage.Inputs -> if (fromHomeInputs) onClose() else vm.overlay = Overlay.ControlCenter(CcPage.Main)
+            CcPage.InputSettings -> vm.overlay = Overlay.ControlCenter(CcPage.Inputs, fromHomeInputs)
             CcPage.Update, CcPage.Setup -> vm.overlay = Overlay.ControlCenter(CcPage.Main)
         }
     }
@@ -187,8 +188,8 @@ fun ControlCenter(
                     // not take focus from the tile Home has just put it back on.
                     when (p) {
                         CcPage.Main -> MainPage(vm, now, visible, onOpen)
-                        CcPage.Inputs -> InputsPage(vm, visible, onOpen)
-                        CcPage.InputSettings -> InputSettingsPage(vm, visible)
+                        CcPage.Inputs -> InputsPage(vm, visible, onOpen, fromHomeInputs, onClose)
+                        CcPage.InputSettings -> InputSettingsPage(vm, visible, fromHomeInputs)
                         CcPage.Update -> UpdatePage(vm, visible)
                         CcPage.Setup -> SetupPage(vm, visible, onOpen)
                     }
@@ -608,7 +609,7 @@ private fun BrightnessRow(vm: HomeViewModel) {
 }
 
 @Composable
-private fun InputsPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.content.Intent) -> Unit) {
+private fun InputsPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.content.Intent) -> Unit, fromHome: Boolean, onClose: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         if (!takeFocus) return@LaunchedEffect
@@ -616,13 +617,18 @@ private fun InputsPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.c
         runCatching { first.requestFocus() }
     }
     Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState())) {
-        MenuRow(Glyph.ChevronLeft, stringResource(R.string.cc_inputs), onClick = { vm.overlay = Overlay.ControlCenter(CcPage.Main) })
+        MenuRow(Glyph.ChevronLeft, stringResource(R.string.home_inputs_title), onClick = {
+            if (fromHome) onClose() else vm.overlay = Overlay.ControlCenter(CcPage.Main)
+        })
         Spacer(Modifier.height(8.dp))
         if (vm.sources.isEmpty()) {
             BasicText(stringResource(R.string.cc_no_inputs), style = Type.Callout, modifier = Modifier.padding(14.dp))
         }
         val connected = stringResource(R.string.input_connected)
         vm.sources.forEachIndexed { i, source ->
+            val look = SourceLooks.of(source.id)
+            val device = if (source.dynamicSpd) source.deviceName else
+                look?.name ?: look?.device?.let { stringResource(it.label) } ?: source.deviceName
             MenuRow(
                 glyph = when (source.kind) {
                     SourceKind.Hdmi, SourceKind.DisplayPort -> Glyph.Hdmi
@@ -631,10 +637,9 @@ private fun InputsPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.c
                     SourceKind.Usb -> Glyph.Usb
                     SourceKind.Other -> Glyph.Input
                 },
-                text = source.label,
+                text = device ?: source.label,
                 // What the owner named the input on its tile, else what HDMI-CEC reports.
-                trailing = SourceLooks.of(source.id)?.let { it.name ?: it.device?.let { d -> stringResource(d.label) } }
-                    ?: source.deviceName ?: if (source.connected) connected else null,
+                trailing = if (device != null) source.label else if (source.connected) connected else null,
                 focusRequester = if (i == 0) first else null,
                 onClick = { onOpen(source.intent) },
             )
@@ -642,7 +647,7 @@ private fun InputsPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.c
         // Switching is this page's one job; what Aerial does with the inputs is a page further in.
         if (vm.sources.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
-            MenuRow(Glyph.Gear, stringResource(R.string.cc_inputs_settings), onClick = { vm.overlay = Overlay.ControlCenter(CcPage.InputSettings) })
+            MenuRow(Glyph.Gear, stringResource(R.string.cc_inputs_settings), onClick = { vm.overlay = Overlay.ControlCenter(CcPage.InputSettings, fromHome) })
         }
     }
 }
@@ -652,7 +657,7 @@ private fun InputsPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.c
  * TV starts on (one, or none). Kept apart from the list that switches inputs.
  */
 @Composable
-private fun InputSettingsPage(vm: HomeViewModel, takeFocus: Boolean) {
+private fun InputSettingsPage(vm: HomeViewModel, takeFocus: Boolean, fromHome: Boolean = false) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         if (!takeFocus) return@LaunchedEffect
@@ -661,7 +666,7 @@ private fun InputSettingsPage(vm: HomeViewModel, takeFocus: Boolean) {
     }
     fun name(source: app.orchard.tv.system.TvSource) = source.deviceName?.let { "${source.label} · $it" } ?: source.label
     Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState())) {
-        MenuRow(Glyph.ChevronLeft, stringResource(R.string.cc_inputs_settings), onClick = { vm.overlay = Overlay.ControlCenter(CcPage.Inputs) })
+        MenuRow(Glyph.ChevronLeft, stringResource(R.string.cc_inputs_settings), onClick = { vm.overlay = Overlay.ControlCenter(CcPage.Inputs, fromHome) })
 
         Spacer(Modifier.height(10.dp))
         BasicText(stringResource(R.string.cc_inputs_pin), style = Type.Callout, modifier = Modifier.padding(start = 14.dp, bottom = 6.dp))

@@ -63,7 +63,7 @@ data class AppEntry(
  */
 fun sourceEntry(context: Context, source: TvSource): AppEntry {
     val key = SOURCE_KEY_PREFIX + source.id
-    val look = SourceLooks.of(source.id)
+    val look = SourceLooks.of(source.id)?.let { if (source.dynamicSpd) it.copy(device = null) else it }
     val name = look?.name ?: look?.device?.let { context.getString(it.label) }
     // Home arranges its tiles on every move and hide; the art is made again only when it changes.
     val made = SourceArt(look, source.label, source.deviceName, CustomIcons.stamp(key), TileArtFactory.W)
@@ -78,7 +78,7 @@ fun sourceEntry(context: Context, source: TvSource): AppEntry {
     }
     return AppEntry(
         packageName = key,
-        label = name ?: source.label,
+        label = look?.device?.let { context.getString(it.label) } ?: source.deviceName ?: source.label,
         component = ComponentName("input", source.id),
         leanback = false,
         removable = false,
@@ -160,7 +160,7 @@ object AppCatalog {
     /** The apps of the last load, for the phone page. */
     @Volatile var loaded: List<AppEntry> = emptyList(); private set
 
-    /** The TV inputs pinned to Home as Home last arranged them, for the phone page. */
+    /** Inputs editable from the phone; all are grouped on Home, including unpinned inputs. */
     @Volatile var pinnedSources: List<AppEntry> = emptyList()
 
     /** The folder tiles on Home as Home last arranged them, for the phone page. */
@@ -181,7 +181,8 @@ object AppCatalog {
     @Volatile var sources: List<TvSource> = emptyList()
 
     /** Pins an input to Home or takes it off, on the main thread; set while Home is alive. */
-    @Volatile var pinSource: ((id: String, pinned: Boolean) -> Unit)? = null
+    @Volatile var pinSource: ((id: String, pinned: Boolean) -> Boolean)? = null
+    @Volatile var openPersonalize: (() -> Unit)? = null
 
     /**
      * Every app with a TV entry, plus apps that only have a phone-style entry. China-market firmwares

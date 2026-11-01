@@ -1,11 +1,16 @@
 package app.orchard.tv.ui.home
 
 import android.content.Intent
+import android.media.tv.TvInputInfo
+import android.media.tv.TvInputManager
+import android.os.Handler
+import android.os.Looper
 import android.content.res.Configuration
 import android.os.Build
 import android.os.SystemClock
 import android.view.KeyEvent as NativeKeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.core.content.getSystemService
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -30,6 +35,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
@@ -61,6 +67,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -68,6 +75,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.orchard.tv.CcPage
 import app.orchard.tv.apps.SourceLooks
@@ -76,12 +84,15 @@ import app.orchard.tv.Overlay
 import app.orchard.tv.R
 import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.apps.AppEntry
+import app.orchard.tv.apps.SOURCE_KEY_PREFIX
+import app.orchard.tv.system.TvSource
 import app.orchard.tv.ui.control.ControlCenter
 import app.orchard.tv.ui.wallpaper.SheetCovers
 import app.orchard.tv.ui.wallpaper.WallpaperSheet
 import app.orchard.tv.wallpaper.AerialFormats
 import app.orchard.tv.wallpaper.ScreensaverMode
 import app.orchard.tv.wallpaper.Wallpapers
+import app.orchard.tv.wallpaper.WallpaperKind
 import app.orchard.tv.ui.components.liquidGlass
 import app.orchard.tv.ui.theme.LocalReducedMotion
 import app.orchard.tv.ui.theme.Motion
@@ -294,6 +305,14 @@ fun HomeScreen(
     val requesters = remember { HashMap<String, FocusRequester>() }
     fun requester(key: String) = requesters.getOrPut(key) { FocusRequester() }
     val pillRequester = remember { FocusRequester() }
+    val firstSourceId = AerialSettings.orderedSourceIds(vm.sources.map { it.id }).firstOrNull { it in AerialSettings.pinnedSources }
+    val wallpaperRequester = remember { FocusRequester() }
+    val canShuffleDaily = Wallpapers.items.count { it.kind == WallpaperKind.Daily } > 1
+    val showInputs = firstSourceId != null
+    val inputsRequester = firstSourceId?.let { requester(SOURCE_KEY_PREFIX + it) }
+        ?: if (canShuffleDaily) wallpaperRequester else pillRequester
+    val shelfDownRequester = firstSourceId?.let { requester(SOURCE_KEY_PREFIX + it) }
+        ?: apps.firstOrNull()?.let { requester(it.key) } ?: FocusRequester.Cancel
     val appContext = LocalContext.current
     val firmwareInputPanel = remember {
         SystemProbe.tclInputPanel(appContext) != null || SystemProbe.coocaaInputPanel(appContext)
@@ -305,11 +324,38 @@ fun HomeScreen(
     var focusAfterOverlay by remember { mutableStateOf<String?>(null) }
     var indexAfterOverlay by remember { mutableStateOf(0) }
     var pillFocused by remember { mutableStateOf(false) }
+    var inputsFocused by remember { mutableStateOf(false) }
+    var wallpaperFocused by remember { mutableStateOf(false) }
+    var sourceNote by remember { mutableStateOf<TvSource?>(null) }
     var lastFocusedIndex by remember { mutableStateOf(0) }
     val focusedIndex = apps.indexOfFirst { it.key == focusedKey }
     val columns = AerialSettings.homeColumns
-    val focusedRow = if (pillFocused || focusedIndex < 0) 0 else focusedIndex / columns
+    val focusedRow = if (pillFocused || inputsFocused || focusedIndex < 0) 0 else focusedIndex / columns
     val gridEnabled = overlay == Overlay.None
+    // A switch can change its SPD without unplugging the TV's HDMI cable. Refresh while Home
+    // is visible, including the source menu. No polling while another app or HDMI is in front.
+    LaunchedEffect(vm.resumed, app.orchard.tv.system.HdmiSpdSources.revision) {
+        if (vm.resumed) {
+            vm.refreshSources()
+            while (app.orchard.tv.system.HdmiSpdSources.enabled(appContext)) {
+                kotlinx.coroutines.delay(2_000)
+                vm.refreshSources()
+            }
+        }
+    }
+    DisposableEffect(appContext) {
+        val inputs = appContext.getSystemService<TvInputManager>()
+        val callback = object : TvInputManager.TvInputCallback() {
+            private fun changed() { if (vm.resumed) vm.refreshSources() }
+            override fun onInputAdded(inputId: String) = changed()
+            override fun onInputRemoved(inputId: String) = changed()
+            override fun onInputUpdated(inputId: String) = changed()
+            override fun onInputStateChanged(inputId: String, state: Int) = changed()
+            override fun onTvInputInfoUpdated(inputInfo: TvInputInfo) = changed()
+        }
+        val registered = runCatching { inputs?.registerCallback(callback, Handler(Looper.getMainLooper())); inputs != null }.getOrDefault(false)
+        onDispose { if (registered) runCatching { inputs?.unregisterCallback(callback) } }
+    }
 
     // The aerial wallpaper's film, and how far it shows through.
     val filmCover = remember { Animatable(0f) }
@@ -414,16 +460,20 @@ fun HomeScreen(
     }
 
     // First focus once the apps are in; afterwards, put focus back wherever it was when an overlay closes.
-    LaunchedEffect(vm.loaded, overlay) {
+    LaunchedEffect(vm.loaded, overlay, showInputs) {
         if (!vm.loaded || overlay != Overlay.None) return@LaunchedEffect
         withFrameNanos { }
         val wanted = focusAfterOverlay
         focusAfterOverlay = null
-        if (wanted != null) { focusedKey = wanted; pillFocused = false }
+        if (wanted != null) { focusedKey = wanted; pillFocused = false; inputsFocused = false }
         val index = apps.indexOfFirst { it.key == focusedKey }
         // A tile that went while the overlay was up (hidden, put in a folder, a folder ungrouped)
         // leaves focus where it was.
-        if (pillFocused && focusedKey != null) runCatching { pillRequester.requestFocus() }
+        if (inputsFocused && showInputs) runCatching { inputsRequester.requestFocus() }
+        else if (inputsFocused) { inputsFocused = false; focusApp(lastFocusedIndex.coerceAtMost(columns - 1)) }
+        else if (pillFocused && focusedKey != null) runCatching {
+            (if (wallpaperFocused) wallpaperRequester else pillRequester).requestFocus()
+        }
         else focusApp(if (index >= 0) index else if (wanted != null) indexAfterOverlay else lastFocusedIndex)
     }
     // A folder whose last app left closes.
@@ -462,7 +512,8 @@ fun HomeScreen(
         val scrolled = dragged && scroll.value > 1f
         dragged = false
         // Handled even when that is turned off: unhandled, Back would close Home itself.
-        if (focusedRow > 0 || scrolled) focusApp(focusedIndex.coerceAtLeast(0) % columns)
+        if (inputsFocused) focusApp(lastFocusedIndex.coerceAtMost(columns - 1))
+        else if (focusedRow > 0 || scrolled) focusApp(focusedIndex.coerceAtLeast(0) % columns)
         else if (AerialSettings.backStartsScreensaver) onStartScreensaver()
     }
 
@@ -483,8 +534,8 @@ fun HomeScreen(
                     when (code) {
                         NativeKeyEvent.KEYCODE_DPAD_LEFT -> vm.moveBy(-1)
                         NativeKeyEvent.KEYCODE_DPAD_RIGHT -> vm.moveBy(1)
-                        NativeKeyEvent.KEYCODE_DPAD_UP -> vm.moveBy(-columns)
-                        NativeKeyEvent.KEYCODE_DPAD_DOWN -> vm.moveBy(columns)
+                        NativeKeyEvent.KEYCODE_DPAD_UP -> if (!moving.startsWith(SOURCE_KEY_PREFIX)) vm.moveBy(-columns)
+                        NativeKeyEvent.KEYCODE_DPAD_DOWN -> if (!moving.startsWith(SOURCE_KEY_PREFIX)) vm.moveBy(columns)
                         NativeKeyEvent.KEYCODE_BACK, NativeKeyEvent.KEYCODE_DPAD_CENTER,
                         NativeKeyEvent.KEYCODE_ENTER, NativeKeyEvent.KEYCODE_NUMPAD_ENTER -> vm.endMove()
                         else -> return@onPreviewKeyEvent false
@@ -497,7 +548,7 @@ fun HomeScreen(
                         // On an app tile, Menu opens that app's menu (AppTile): remotes whose held
                         // OK never reads as held had no other way to it (issue #28). Control
                         // Center stays one press up, on the status pill, where Menu still opens it.
-                        if (overlay == Overlay.None && !pillFocused && focusedIndex >= 0) return@onPreviewKeyEvent false
+                        if (overlay == Overlay.None && !pillFocused && (inputsFocused || focusedIndex >= 0)) return@onPreviewKeyEvent false
                         // Inside a folder, Menu is the focused app's, as on Home.
                         if (overlay is Overlay.Folder) return@onPreviewKeyEvent false
                         vm.overlay = if (overlay is Overlay.ControlCenter) Overlay.None else Overlay.ControlCenter()
@@ -532,6 +583,15 @@ fun HomeScreen(
             GridMetrics(maxWidth, maxHeight, columns, oneRow, plateNames, peek, hasPlate, largeClock, clockRightNow)
         }
         val collapsePx = with(density) { metrics.collapse.toPx() }
+        val inputsMargin = metrics.margin - PlatePadH
+        val inputsWidth = if (largeClock) minOf(380.dp, maxWidth / 2 - inputsMargin) else maxWidth - inputsMargin * 2
+        var inputsSize by remember { mutableStateOf(IntSize.Zero) }
+        val inputsHeight = with(density) { inputsSize.height.toDp() }.takeIf { it > 0.dp } ?: 145.dp
+        val inputsY = (metrics.topRowY - PlatePadV - 10.dp - inputsHeight).coerceAtLeast(68.dp)
+        val inputsLeft = if (largeClock && !clockRightNow) maxWidth - inputsMargin - inputsWidth else inputsMargin
+        val inputsPlate = if (!showInputs || inputsSize == IntSize.Zero) null else with(density) {
+            Rect(inputsLeft.toPx(), inputsY.toPx(), inputsLeft.toPx() + inputsSize.width, inputsY.toPx() + inputsSize.height)
+        }
 
         // Into the grid as from one row: the first row whole at the top. Two rows go in a row
         // further down, from the second shelf row to the third, so they scroll a row less; scrolled
@@ -705,6 +765,7 @@ fun HomeScreen(
                 wallpaper = Wallpapers.selectedId,
                 glassAwaitsStop = Wallpapers.selectedId == Wallpapers.LIVE && clipGlass == null,
                 gridGlass = clipGlass,
+                inputPlate = inputsPlate,
             )
 
             // Before Android 7 there is no picture of Home under Control Center (issue #466), so the
@@ -752,6 +813,52 @@ fun HomeScreen(
                     )
                 }
 
+                // Use the empty area above the apps; keep a large clock on its own side.
+                val compactInputs = AerialSettings.largeClock
+                if (showInputs) InputsCard(
+                    sources = vm.sources,
+                    compact = compactInputs,
+                    enabled = gridEnabled && (moving == null || moving.startsWith(SOURCE_KEY_PREFIX)) && !inGrid && !vm.screensaverVisible,
+                    focusRequester = inputsRequester,
+                    sourceRequester = { requester(SOURCE_KEY_PREFIX + it.id) },
+                    movingKey = moving,
+                    upRequester = if (canShuffleDaily) wallpaperRequester else pillRequester,
+                    downRequester = apps.getOrNull(lastFocusedIndex.coerceAtMost(columns - 1))?.let { requester(it.key) },
+                    onFocused = { gained ->
+                        if (gained) {
+                            if (focusedKey == null && apps.isNotEmpty()) focusApp(0)
+                            else { inputsFocused = true; pillFocused = false }
+                        }
+                    },
+                    onClick = {
+                        inputsFocused = true
+                        pillFocused = false
+                        vm.refreshSources()
+                        vm.overlay = Overlay.ControlCenter(CcPage.Inputs, fromHomeInputs = true)
+                    },
+                    onOpenSource = { source ->
+                        inputsFocused = true
+                        pillFocused = false
+                        if (moving != null) vm.endMove() else { vm.overlay = Overlay.None; onOpen(source.intent) }
+                    },
+                    onLongPress = { source, bounds ->
+                        inputsFocused = true
+                        pillFocused = false
+                        vm.overlay = Overlay.AppMenu(SOURCE_KEY_PREFIX + source.id, bounds)
+                    },
+                    modifier = Modifier
+                        .align(if (compactInputs && !clockRight) Alignment.TopEnd else Alignment.TopStart)
+                        .padding(horizontal = inputsMargin)
+                        .offset { IntOffset(0, with(density) { inputsY.roundToPx() } - lift.roundToInt()) }
+                        .width(inputsWidth)
+                        .onSizeChanged { inputsSize = it }
+                        .graphicsLayer {
+                            alpha = (1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)) *
+                                (1f - (toSaver.value * 2f).coerceIn(0f, 1f))
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                        },
+                )
+
                 // The rows below the shelf stay out of sight until Home scrolls to them: in one row
                 // unless set to peek; in two rows always, as the second row already shows there are more.
                 val hiddenFrom = when {
@@ -780,6 +887,8 @@ fun HomeScreen(
                                 focusedKey = app.key
                                 lastFocusedIndex = index
                                 pillFocused = false
+                                inputsFocused = false
+                                wallpaperFocused = false
                             },
                             onClick = { bounds ->
                                 val mover = moving
@@ -810,6 +919,7 @@ fun HomeScreen(
                             },
                             modifier = Modifier
                                 .diagLayer("tiles")
+                                .focusProperties { if (index < columns && moving == null) up = inputsRequester }
                                 // Lifted on the shelf with the plate; the clock above stays put.
                                 .offset { slot.value - IntOffset(0, lift.roundToInt()) }
                                 .then(
@@ -866,6 +976,21 @@ fun HomeScreen(
                     saving = vm.screensaverVisible,
                 )
             }
+            if (canShuffleDaily) WallpaperShuffleButton(
+                enabled = gridEnabled && moving == null && !vm.screensaverVisible,
+                focusRequester = wallpaperRequester,
+                onFocused = { gained ->
+                    if (gained) {
+                        if (focusedKey == null && apps.isNotEmpty()) focusApp(0)
+                        else { wallpaperFocused = true; pillFocused = true; inputsFocused = false }
+                    }
+                },
+                onClick = Wallpapers::shuffleDaily,
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .focusProperties { down = shelfDownRequester; right = pillRequester; left = FocusRequester.Cancel }
+                    .graphicsLayer { alpha = 1f - (toSaver.value * 2f).coerceIn(0f, 1f) },
+            )
             StatusPill(
                 now = now,
                 network = vm.network,
@@ -874,11 +999,10 @@ fun HomeScreen(
                 focusRequester = pillRequester,
                 modifier = Modifier
                     .diagLayer("pill")
-                    // Down goes back to the top-row tile Up came from, not to the nearest one,
-                    // which under the pill is the last of the row (issue #703).
+                    // The input card is the single step between the apps and the status pill.
                     .focusProperties {
-                        val key = focusedKey
-                        if (key != null && apps.indexOfFirst { it.key == key } in 0 until columns) down = requester(key)
+                        down = shelfDownRequester
+                        if (canShuffleDaily) left = wallpaperRequester
                     }
                     .graphicsLayer {
                         alpha = 1f - (toSaver.value * 2f).coerceIn(0f, 1f)
@@ -892,6 +1016,8 @@ fun HomeScreen(
                             if (apps.isNotEmpty()) focusApp(0)
                         } else {
                             pillFocused = true
+                            inputsFocused = false
+                            wallpaperFocused = false
                         }
                     }
                 },
@@ -899,6 +1025,8 @@ fun HomeScreen(
                     // A tap focuses the pill and opens Control Center in the same frame, before
                     // onFocused hears of it: note it here so focus comes back to the pill.
                     pillFocused = true
+                    inputsFocused = false
+                    wallpaperFocused = false
                     vm.overlay = Overlay.ControlCenter()
                 },
             )
@@ -976,6 +1104,7 @@ fun HomeScreen(
             anchor = menu?.anchor,
             inFolder = menu?.inFolder != null,
             folders = vm.folders(),
+            onSourceNote = { key -> sourceNote = vm.entry(key)?.source; closeMenu() },
             onMove = { vm.startMove(it) },
             onHide = { key ->
                 closeMenu()
@@ -1024,6 +1153,7 @@ fun HomeScreen(
             },
             onDismiss = { closeMenu() },
         )
+        sourceNote?.let { source -> SourceNoteDialog(source) { sourceNote = null } }
 
         HiddenAppsSheet(
             visible = overlay is Overlay.HiddenApps,

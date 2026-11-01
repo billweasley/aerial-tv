@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="notice_source_limit">Show up to three sources on Home.</string>
+    <string name="source_note_title">Add note</string>
+    <string name="source_note_hint">For example: TV, games, or family movies</string>
+    <string name="st_glass_transparency">Glass transparency</string>
+    <string name="st_glass_transparency_hint">Higher values let more wallpaper show through both Home shelves.</string>
+    <string name="home_inputs_all">All inputs</string>
+    <string name="home_wallpaper_next">Another picture</string>
+    <string name="home_inputs_title">Inputs</string>
+    <string name="home_inputs_open">Choose a device</string>
+    <string name="home_inputs_available">Select to view</string>
     <string name="app_name">Aerial</string>
     <string name="guard_name">Aerial Home Guard</string>
     <string name="guard_description">Keeps Aerial as your home screen on TVs that do not let you change it. Reads no screen content.</string>
@@ -170,11 +180,12 @@
     <string name="cc_inputs_boot">When the TV Turns On (one)</string>
     <string name="cc_inputs_boot_none">Nothing, stay on Aerial</string>
     <string name="cc_inputs_boot_hint">Switch to this input when the TV is turned on or wakes from standby. Home still comes back to Aerial. To start on an app instead, a live TV app say, press and hold it on Home and choose Open When TV Turns On.</string>
-    <string name="cc_inputs_pin_hint">Pinned inputs appear as tiles at the front of Home; select one to switch straight to it. Long-press a tile to move or remove it.</string>
+    <string name="cc_inputs_pin_hint">Selected inputs take priority in the Inputs card on Home. Open the card to choose from all inputs.</string>
     <string name="menu_unpin_source">Remove from Home</string>
     <string name="menu_source_device">Connected Device</string>
     <string name="menu_source_plain">Default</string>
     <string name="device_apple_tv">Apple TV</string>
+    <string name="device_google_tv">Google TV</string>
     <string name="device_playstation">PlayStation</string>
     <string name="device_switch">Nintendo Switch</string>
     <string name="device_xbox">Xbox</string>

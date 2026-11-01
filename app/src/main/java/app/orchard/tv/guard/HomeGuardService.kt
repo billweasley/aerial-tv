@@ -310,6 +310,7 @@ class HomeGuardService : AccessibilityService() {
      */
     private val userUnlocked = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val startedEarly = takeEarlyKnownHome("user unlocked")
             // Before unlock only Direct Boot aware launchers resolve, and only Direct Boot aware
             // activities are found: PatchWall's home screen was cached as missing while locked, so
             // FIRMWARE_HOMES_WITHOUT_FILTER lost it until Aerial restarted (MiTV-MOOQ0, Android 11).
@@ -318,14 +319,19 @@ class HomeGuardService : AccessibilityService() {
             watchCecInput()
             updateKeyFilter()
             // The ADB and screensaver checks were skipped while locked.
-            GuardSetup.ensureEnabled(this@HomeGuardService)
+            // AccountManager/sync and settings can wait on system_server during unlock. They
+            // must not hold the main thread ahead of MainActivity's first frame (MFTR0 boot trace).
+            val app = applicationContext
+            kotlin.concurrent.thread(name = "AerialUnlockSetup") {
+                runCatching { GuardSetup.ensureEnabled(app) }.onFailure { Log.w(TAG, "deferred unlock setup failed", it) }
+            }
             val skipReason = when {
                 SystemClock.elapsedRealtime() >= BOOT_WINDOW_MS -> "outside boot window"
                 getSystemService<PowerManager>()?.isInteractive != true -> "screen off"
                 else -> null
             }
-            if (skipReason == null) takeOverOnceSettled("user unlocked", woke = true)
-            else Log.i(TAG, "user unlocked; not taking over Home ($skipReason)")
+            if (skipReason == null && !startedEarly) takeOverOnceSettled("user unlocked", woke = true)
+            else if (skipReason != null) Log.i(TAG, "user unlocked; not taking over Home ($skipReason)")
         }
     }
 
@@ -373,6 +379,14 @@ class HomeGuardService : AccessibilityService() {
             if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) BootOpen.noteHomeKey(this@HomeGuardService)
             if (backOnPause) noteHomeInAerial()
             val front = lastWindow?.first
+            // Some external-input players keep their own window after Home instead of opening
+            // the stock launcher. A Home press still explicitly asks for this launcher.
+            if (front in INPUT_PLAYERS && !CecHome.active(this@HomeGuardService, front)) {
+                Log.i(TAG, "Home in external input; returning to Aerial")
+                allowStockUntil = 0L
+                goHome()
+                return
+            }
             if (front != null && front !in stockHomes) {
                 windowsAtHome = windowsSeen
                 homePressedAt = SystemClock.uptimeMillis()
@@ -461,18 +475,39 @@ class HomeGuardService : AccessibilityService() {
      * MiTV-MFTR0 (Android 14) 4.7 s and 5 s in two boots, with PatchWall on screen meanwhile
      * (11-13 s from the screen lighting to Aerial). Within the boot window the take-over starts
      * here; it treats the front as unknown, as onServiceConnected does when nothing has been seen.
-     * Only with something chosen to open at power-on, which goes over whatever is in front anyway.
-     * Otherwise an input PatchWall plays at power-on (the last one used) or an HDMI-CEC device
-     * switched to would be pulled out of, which only the window changes after the connection can
-     * tell (see takeOverOnceSettled). Not after a wake either, for the same reason.
+     * Without a boot target, the owner's Xiaomi Home-capture setup may take over early only after
+     * usage stats confirm PatchWall in front. An unknown front or a player is left to normal settling.
+     * Other TVs retain the upstream boot-target behavior, and wake handling retains its CEC grace.
      */
     override fun onCreate() {
         super.onCreate()
         if (SystemClock.elapsedRealtime() >= BOOT_WINDOW_MS || !GuardSetup.isUserUnlocked(this)) return
-        if (!hasBootSource()) return
         if (getSystemService<PowerManager>()?.isInteractive != true) return
-        Log.i(TAG, "started shortly after boot; taking over before the service is connected")
-        takeOverOnceSettled("started shortly after boot", woke = true)
+        if (hasBootSource()) {
+            Log.i(TAG, "started shortly after boot; taking over before the service is connected")
+            takeOverOnceSettled("started shortly after boot", woke = true)
+        } else if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R && xiaomiInput && GuardSetup.captureHomeKey(this) &&
+            DeviceProfile.current(this).bootStockMs == 0) {
+            // Give a source already switching a chance to report its activity, then require a
+            // positively identified stock launcher. No guessed takeover on an unknown front.
+            handler.postDelayed(earlyKnownHome, 250)
+        }
+    }
+
+    private val earlyKnownHome = Runnable { takeEarlyKnownHome("service created") }
+
+    private fun takeEarlyKnownHome(reason: String): Boolean {
+        if (SystemClock.elapsedRealtime() >= BOOT_WINDOW_MS || !GuardSetup.isUserUnlocked(this) ||
+            getSystemService<PowerManager>()?.isInteractive != true ||
+            SystemClock.uptimeMillis() < allowStockUntil || aerialResumed ||
+            Build.VERSION.SDK_INT <= Build.VERSION_CODES.R || !xiaomiInput || !GuardSetup.captureHomeKey(this) ||
+            hasBootSource() || DeviceProfile.current(this).bootStockMs > 0) return false
+        val front = frontByUsage()?.first ?: lastWindow?.first
+        if (front != PATCHWALL) return false
+        handler.removeCallbacks(takeOver)
+        Log.i(TAG, "early boot at $reason: PatchWall confirmed in front; taking Home before guard connection settles")
+        goHome(woke = true)
+        return true
     }
 
     // The opt-in CEC Home (CecHome) depends on the input in front, which can change without a new
@@ -737,6 +772,7 @@ class HomeGuardService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(earlyKnownHome)
         handler.removeCallbacks(refreshHomesAfterPackageChange)
         runCatching { unregisterReceiver(packageChanges) }
         runCatching { unregisterReceiver(screenOn) }
@@ -803,8 +839,13 @@ class HomeGuardService : AccessibilityService() {
         // never hung with the filter on, and without it Home showed the TCL launcher first
         // (issue #1039).
         val mouseHang = mouseAttached && xiaomiInput
+        // The owner deliberately opened PatchWall. Routing its navigation through Android's
+        // accessibility injector can turn one directional press into two on Xiaomi (#293).
+        // Let all of its keys go through the native stack; homeKey still answers its Home broadcast.
+        val stockPassThrough = GuardSetup.captureHomeKey(this) && SystemClock.uptimeMillis() < allowStockUntil
         val wanted = !keysPassThrough && !screenOff && !padGame && !mouseHang &&
-            (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R || aerialInFront)
+            HomeKeyPolicy.wantsFilter(Build.VERSION.SDK_INT, aerialInFront, GuardSetup.captureHomeKey(this), stockPassThrough, aerialResumed)
+
         val homeWanted = wanted && !isDefaultHome()
         val cecWanted = !screenOff && !mouseHang && CecHome.active(this, lastWindow?.first)
         filteringForCecOnly = cecWanted && !homeWanted
@@ -897,7 +938,8 @@ class HomeGuardService : AccessibilityService() {
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (!GuardSetup.isUserUnlocked(this)) return false
-        if (event.keyCode in VOLUME_KEYS) return if (filteringForCecOnly) false else takeVolumeKey(event)
+        // The owner's Home-only capture leaves volume handling to the firmware.
+        if (event.keyCode in VOLUME_KEYS) return if (filteringForCecOnly || GuardSetup.captureHomeKey(this)) false else takeVolumeKey(event)
         // Any key that is done: whatever it did to the volume (Control Center's slider) is in.
         if (event.action == KeyEvent.ACTION_UP) volumeSeen = volumeNow()
         if (event.keyCode != KeyEvent.KEYCODE_HOME) return false
@@ -1181,9 +1223,9 @@ class HomeGuardService : AccessibilityService() {
             goHome(woke = SystemClock.elapsedRealtime() - screenOnAt < WAKE_WINDOW_MS)
             return
         }
-        updateKeyFilter()
         // Leaving the stock launcher for a real app ends the visit: Home goes to Aerial again.
         if (allowed && pkg != packageName && isApp(pkg)) allowStockUntil = 0L
+        updateKeyFilter()
     }
 
     private val activityCache = HashMap<Pair<String, String>, Boolean>()
@@ -1595,6 +1637,7 @@ class HomeGuardService : AccessibilityService() {
         }.getOrDefault(false)
 
         fun refreshCecHome() { instance?.run { watchCecInput(); updateKeyFilter() } }
+        fun refreshHomeKeyCapture() { instance?.updateKeyFilter() }
 
         /** Looks once more at boot completion; false if the guard is not running. */
         fun onBootCompleted(): Boolean {
@@ -1637,7 +1680,11 @@ class HomeGuardService : AccessibilityService() {
 
         /** Lets the stock launcher stay in front until Aerial is back: the viewer opened it on purpose. */
         fun allowStockLauncher() {
-            instance?.allowStockUntil = SystemClock.uptimeMillis() + 60 * 60 * 1000L
+            instance?.run {
+                allowStockUntil = SystemClock.uptimeMillis() + 60 * 60 * 1000L
+                // Before launching it, rather than after its first navigation event.
+                updateKeyFilter()
+            }
         }
 
         /** Whether Aerial's Home is resumed; set by MainActivity, in this same process. */

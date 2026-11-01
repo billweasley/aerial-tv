@@ -43,6 +43,16 @@ object GuardSetup {
 
     private const val REVIVAL_WINDOW_MS = 10 * 60 * 1000L
     private const val KEY_KEEP_ADB = "keep_adb"
+    private const val KEY_CAPTURE_HOME = "capture_home_key"
+
+    /** Owner opt-in for firmware whose stock launcher is visible before the window callback. */
+    fun captureHomeKey(context: Context): Boolean = isUserUnlocked(context) &&
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CAPTURE_HOME, false)
+
+    fun setCaptureHomeKey(context: Context, capture: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CAPTURE_HOME, capture).apply()
+        HomeGuardService.refreshHomeKeyCapture()
+    }
 
     /** When [ensureAdbListening] may still act: only boot shows the lying setting (issue #454). */
     private const val ADB_BOOT_WINDOW_MS = 3 * 60_000L

@@ -57,6 +57,9 @@ data class TvSource(
     val firmwareLabel: String? = null,
     /** Hidden by DeviceProfile; only in [SystemProbe.inputsToCheck]. */
     val hidden: Boolean = false,
+    /** A fresh RX SPD identity, only while an explicitly configured SPD reader is enabled. */
+    val spd: HdmiSpd? = null,
+    val dynamicSpd: Boolean = false,
 ) {
     /** The Xiaomi tvplayer source id this input opens, or null when it does not go through it. */
     val xiaomiInput: Int? get() = intent.takeIf { it.component?.packageName == SystemProbe.XIAOMI_PLAYER && it.hasExtra("input") }?.getIntExtra("input", 0)
@@ -612,7 +615,14 @@ object SystemProbe {
         .ifEmpty { KonkaSources.load(context) }
         .ifEmpty { tclSources(context) }
         .ifEmpty { whaleySources(context) }
-        .ifEmpty { skyworthSources(context) } + listOfNotNull(usbSource(context))
+        .ifEmpty { skyworthSources(context) }
+        .let { listed ->
+            val names = if (listed.any { it.kind == SourceKind.Hdmi && it.deviceName == null }) HdmiDeviceNames.read(context) else emptyMap()
+            listed.map { source ->
+                val name = source.deviceName ?: if (source.connected) HdmiDeviceNames.port(source)?.let(names::get) else null
+                if (name == null) source else source.copy(deviceName = name, connected = true)
+            }
+        }.let { HdmiSpdSources.enrich(context, it) } + listOfNotNull(usbSource(context))
 
     /**
      * The TV's own player for USB drives, offered as one more input: owners switch the TV on to
@@ -686,7 +696,8 @@ object SystemProbe {
                     id = info.id,
                     label = hw(info.id)?.let { profile.labels[it] } ?: label,
                     kind = kind,
-                    connected = device != null || state == TvInputManager.INPUT_STATE_CONNECTED && kind != SourceKind.Tuner,
+                    // A cached CEC device name does not establish that its cable is still present.
+                    connected = state == TvInputManager.INPUT_STATE_CONNECTED && kind != SourceKind.Tuner,
                     deviceName = device,
                     intent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                     hardware = hw(info.id),

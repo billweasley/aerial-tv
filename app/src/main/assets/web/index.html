@@ -1093,6 +1093,12 @@ const TEXTS = {
   "Диагностика көшірілді. Ашылған GitHub бетінде оны «Диагностика» өрісіне қойыңыз."
  ]
 };
+KEYS.push("source_note", "source_note_placeholder", "source_note_hint");
+TEXTS.zh.push("添加备注", "例如：看电视、玩游戏", "备注显示在设备名称下方，设备名会保留。留空可清除备注。");
+TEXTS.en.push("Add note", "For example: TV or games", "The note appears below the device name. Leave blank to clear it.");
+TEXTS.ru.push("Добавить заметку", "Например: ТВ или игры", "Заметка появится под названием устройства. Оставьте поле пустым для удаления.");
+TEXTS.uk.push("Додати примітку", "Наприклад: ТБ або ігри", "Примітка з’явиться під назвою пристрою. Залиште поле порожнім для видалення.");
+TEXTS.kk.push("Ескертпе қосу", "Мысалы: теледидар немесе ойындар", "Ескертпе құрылғы атауының астында көрсетіледі. Өшіру үшін бос қалдырыңыз.");
 const LANGS = Object.keys(TEXTS);
 const LANG = (() => {
   const asked = new URLSearchParams(location.search).get('lang');
@@ -1431,11 +1437,17 @@ function renderInputs() {
   $('#inputsBox').hidden = !inputs.length || arrView !== null;
   const list = $('#inputs'); list.replaceChildren();
   for (const s of inputs) {
-    const row = el('label', 'item');
-    const txt = el('span', 'txt', s.name || s.port);
-    const sub = [s.name ? s.port : '', s.device].filter(Boolean).join(' · ');
+    const row = el('div', 'item');
+    const txt = el('button', 'txt', s.device || s.port);
+    txt.type = 'button'; txt.style.textAlign = 'left';
+    txt.onclick = () => {
+      const key = 'input:' + s.id;
+      const app = (state.apps || []).find(a => a.key === key);
+      if (app) tileSheet({ key, label: app.label, stamp: app.stamp, kind: 'source' }, null, false);
+    };
+    const sub = [s.name, s.device ? s.port : ''].filter(Boolean).join(' · ');
     if (sub) txt.appendChild(el('span', 'sub', sub));
-    const sw = el('input', 'switch'); sw.type = 'checkbox'; sw.checked = !!s.pinned; sw.setAttribute('aria-label', s.name || s.port);
+    const sw = el('input', 'switch'); sw.type = 'checkbox'; sw.checked = !!s.pinned; sw.disabled = !s.pinned && inputs.filter(x => x.pinned).length >= 3; sw.setAttribute('aria-label', s.name || s.port);
     sw.onchange = async () => {
       const on = sw.checked; sw.disabled = true;
       try {
@@ -1677,8 +1689,8 @@ function tileSheet(e, inFolder, hidden) {
     const nl = el('div', 'list'); body.appendChild(nl);
     const f = el('form', 'item field');
     const input = el('input'); input.type = 'text'; input.value = a.name || ''; input.maxLength = 24;
-    input.placeholder = a.source ? t('name_ph') : (a.default || a.label);
-    input.setAttribute('enterkeyhint', 'done'); input.autocomplete = 'off'; input.setAttribute('aria-label', t('aria_rename'));
+    input.placeholder = a.source ? t('source_note_placeholder') : (a.default || a.label);
+    input.setAttribute('enterkeyhint', 'done'); input.autocomplete = 'off'; input.setAttribute('aria-label', t(a.source ? 'source_note' : 'aria_rename'));
     const save = el('button', 'link', t('save'));
     const sync = () => save.disabled = input.value.trim() === (a.name || '');
     input.oninput = sync; sync();
@@ -1688,10 +1700,10 @@ function tileSheet(e, inFolder, hidden) {
       try {
         const next = await api('api/app/name', { app: a.key, name });
         if (!next.saved) throw new Error('not saved');
-        take(next); toast(t(name.trim() ? 'toast_renamed' : 'toast_name_reset'));
+        take(next); toast(t(a.source ? 'toast_tv_updated' : name.trim() ? 'toast_renamed' : 'toast_name_reset'));
       } catch (err) { toast(t('toast_rename_fail')); }
     };
-    body.appendChild(el('p', 'foot', a.source ? t('rename_hint') : t('rename_hint_app', { name: a.default || a.label }))).style.marginBottom = '12px';
+    body.appendChild(el('p', 'foot', a.source ? t('source_note_hint') : t('rename_hint_app', { name: a.default || a.label }))).style.marginBottom = '12px';
 
     // Picture: for an input, the device plugged into it first (as in its menu on the TV).
     const il = el('div', 'list'); body.appendChild(il);

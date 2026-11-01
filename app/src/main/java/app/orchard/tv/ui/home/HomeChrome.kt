@@ -249,6 +249,7 @@ fun HomeBackground(
     glassAwaitsStop: Boolean = false,
     /** The grid's own glass, where it is not the picture's ([frosted]): the aerial film's (Wallpapers.clipGlass). */
     gridGlass: ImageBitmap? = null,
+    inputPlate: Rect? = null,
 ) {
     val shade = remember { Images.homeShade.asImageBitmap() }
     Box(Modifier.fillMaxSize()) {
@@ -271,6 +272,8 @@ fun HomeBackground(
             // the smoke and the edge alone, see-through, over the film moving or stopped.
             val glassless = Wallpapers.filmGlassless
             Plate(frosted ?: backdrop, filmGlass.takeUnless { glassless }, filmGlass != null, glassless, plate, scroll, collapse, cover, filmStopped, toSaver, lift)
+            // Both shelves use the same tint, continuous corners, rim and wallpaper sampling.
+            Plate(frosted ?: backdrop, filmGlass.takeUnless { glassless }, filmGlass != null, glassless, inputPlate, scroll, collapse, cover, filmStopped, toSaver, lift)
         }
     }
 }
@@ -375,7 +378,7 @@ private fun Plate(glass: ImageBitmap?, film: ImageBitmap?, filmPlate: Boolean, d
     val swap = remember { Animatable(1f) }
     fun visibility(): Float {
         val rest = 1f - smooth(((scroll() / collapse).coerceIn(0f, 1f) / 0.55f).coerceIn(0f, 1f))
-        return rest * (1f - cover() * (1f - filmStopped())) * (1f - toSaver())
+        return rest * (1f - cover() * (1f - filmStopped())) * (1f - toSaver()) * (1f - AerialSettings.glassTransparency / 100f)
     }
     LaunchedEffect(glass) {
         if (glass === shown) return@LaunchedEffect
@@ -448,7 +451,7 @@ private fun Plate(glass: ImageBitmap?, film: ImageBitmap?, filmPlate: Boolean, d
         // The film's plate, while the film shows and the plate over a picture does not hide it.
         // With no frame to frost (an input's picture, which cannot be copied) it is the smoke and
         // the lit edge alone, so the top row keeps a plate over anything.
-        val base = (1f - smooth(((scroll() / collapse).coerceIn(0f, 1f) / 0.55f).coerceIn(0f, 1f))) * (1f - toSaver())
+        val base = (1f - smooth(((scroll() / collapse).coerceIn(0f, 1f) / 0.55f).coerceIn(0f, 1f))) * (1f - toSaver()) * (1f - AerialSettings.glassTransparency / 100f)
         val frame = filmTop
         val edge = smoke
         if (edge != null && (filmPlate || cover() > 0.01f) && alpha < 0.99f && base > 0.01f) {
@@ -800,6 +803,30 @@ fun VpnBadge(color: Color, modifier: Modifier = Modifier, fontSize: TextUnit = 1
  * Top right: network and, once the shelf clock has scrolled away, the time. Focusable: it is
  * where Up from the top row leads, and it opens Control Center.
  */
+@Composable
+fun WallpaperShuffleButton(
+    enabled: Boolean,
+    focusRequester: FocusRequester,
+    onFocused: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Pressable(onClick = onClick, enabled = enabled, focusRequester = focusRequester, focusedScale = 1.06f, modifier = modifier) { state ->
+        LaunchedEffect(state.focused) { onFocused(state.focused) }
+        val foreground = if (state.focused) Palette.OnFocus else Color.White
+        Row(
+            Modifier.clip(RoundedCornerShape(50))
+                .background(if (state.focused) Palette.Focus else Color.Black.copy(alpha = 0.28f))
+                .height(34.dp).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GlyphIcon(Glyph.Photo, foreground, 17.dp)
+            BasicText(stringResource(R.string.home_wallpaper_next), style = Type.Headline.copy(color = foreground))
+        }
+    }
+}
+
 @Composable
 fun StatusPill(
     now: LocalDateTime,

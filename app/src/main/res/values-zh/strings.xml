@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="notice_source_limit">主页最多显示 3 个信号源，请先取消一个。</string>
+    <string name="source_note_title">添加备注</string>
+    <string name="source_note_hint">例如：看电视、玩游戏、家庭电影</string>
+    <string name="st_glass_transparency">毛玻璃透明度</string>
+    <string name="st_glass_transparency_hint">数值越大越通透，同时调整信号源区域和应用栏。</string>
+    <string name="home_inputs_all">全部信号源</string>
+    <string name="home_wallpaper_next">换一张壁纸</string>
+    <string name="home_inputs_title">信号源</string>
+    <string name="home_inputs_open">按确认键选择设备</string>
+    <string name="home_inputs_available">进入选择</string>
     <string name="guard_name">Aerial 桌面守护</string>
     <string name="guard_description">在不允许更换桌面的电视上，让 Aerial 保持为主屏幕。不会读取任何屏幕内容。</string>
 
@@ -165,15 +175,16 @@
     <string name="st_effects_hint">流畅：面板用纯色，选中的 App 不加高光和视差，屏幕保持 60Hz，给会卡顿的电视用。</string>
     <string name="st_effects_auto_lite_hint">这台电视内存较小或系统较旧，「自动」用的是流畅。</string>
     <string name="cc_inputs_settings">信号源设置</string>
-    <string name="cc_inputs_pin">显示在主屏幕（可多选）</string>
+    <string name="cc_inputs_pin">显示在主屏幕（最多 3 个）</string>
     <string name="cc_inputs_boot">开机时打开（选一个）</string>
     <string name="cc_inputs_boot_none">不打开，停在 Aerial</string>
     <string name="cc_inputs_boot_hint">电视开机或从待机唤醒时，直接切到这个信号源。按主页键仍会回到 Aerial。想开机直接打开某个 App（比如直播 App），在主屏幕上长按它，选「开机时打开」。</string>
-    <string name="cc_inputs_pin_hint">选中的信号源会作为磁贴出现在主屏幕最前面，按一下直接切换过去。长按磁贴可以移动或移除。</string>
+    <string name="cc_inputs_pin_hint">选中的信号源会优先显示在主页的「输入源」卡片里。打开卡片可以选择全部输入，不再单独占用应用磁贴。</string>
     <string name="menu_unpin_source">从主屏幕移除</string>
     <string name="menu_source_device">接入的设备</string>
     <string name="menu_source_plain">默认</string>
     <string name="device_apple_tv">Apple TV</string>
+    <string name="device_google_tv">Google TV</string>
     <string name="device_playstation">PlayStation</string>
     <string name="device_switch">Nintendo Switch</string>
     <string name="device_xbox">Xbox</string>

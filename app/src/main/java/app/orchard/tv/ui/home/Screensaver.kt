@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.orchard.tv.ui.components.FilmSlot
 import app.orchard.tv.apps.AppEntry
@@ -340,14 +342,14 @@ private fun Labels(
             targetState = caption.orEmpty(),
             // One after the other: two names fading across each other in the same place smeared.
             transitionSpec = { fadeIn(tween(600, delayMillis = 400, easing = Motion.EaseOut)) togetherWith fadeOut(tween(400, easing = Motion.EaseOut)) },
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 56.dp, bottom = 44.dp)
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 56.dp, end = 56.dp, bottom = 44.dp)
                 .graphicsLayer { translationX = drift.x.toPx(); translationY = -drift.y.toPx() },
             label = "caption",
         ) { text ->
             BasicText(
                 text, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                style = Type.Title.copy(color = Color.White.copy(alpha = 0.92f)),
-                modifier = Modifier.widthIn(max = 620.dp),
+                style = Type.Title.copy(color = Color.White.copy(alpha = 0.92f), lineHeight = 28.sp),
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

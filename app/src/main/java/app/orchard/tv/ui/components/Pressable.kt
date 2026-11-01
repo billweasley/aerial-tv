@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -27,6 +28,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import app.orchard.tv.system.Sounds
 import app.orchard.tv.ui.theme.LocalReducedMotion
 import app.orchard.tv.ui.theme.Motion
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 fun KeyEvent.isSelect(): Boolean = when (nativeKeyEvent.keyCode) {
     NativeKeyEvent.KEYCODE_DPAD_CENTER, NativeKeyEvent.KEYCODE_ENTER, NativeKeyEvent.KEYCODE_NUMPAD_ENTER,
@@ -71,12 +75,17 @@ fun Pressable(
     focusRequester: FocusRequester? = null,
     focusedScale: Float = 1.06f,
     onKey: ((KeyEvent) -> Boolean)? = null,
+    onLongPress: (() -> Unit)? = null,
     content: @Composable BoxScope.(PressState) -> Unit,
 ) {
     val state = remember { PressState() }
     val ownRequester = remember { FocusRequester() }
     val requester = focusRequester ?: ownRequester
     val click by rememberUpdatedState(onClick)
+    val longClick by rememberUpdatedState(onLongPress)
+    val scope = rememberCoroutineScope()
+    var holdJob by remember { mutableStateOf<Job?>(null) }
+    var held by remember { mutableStateOf(false) }
     val reduced = LocalReducedMotion.current
     val scale by animateFloatAsState(
         targetValue = when {
@@ -95,11 +104,12 @@ fun Pressable(
                 if (it.isFocused && !state.focused) Sounds.focusMoved()
                 state.focused = it.isFocused
                 if (!it.isFocused) {
+                    holdJob?.cancel()
                     state.pressed = false
                     state.byKey = false
                 }
             }
-            .pointerInput(enabled) {
+            .pointerInput(enabled, onLongPress != null) {
                 if (!enabled) return@pointerInput
                 detectTapGestures(
                     onPress = {
@@ -108,25 +118,55 @@ fun Pressable(
                         if (!state.byKey) state.pressed = false
                     },
                     onTap = {
+                        if (held) { held = false; return@detectTapGestures }
                         runCatching { requester.requestFocus() }
                         Sounds.select()
                         click()
+                    },
+                    onLongPress = if (onLongPress == null) null else { _ ->
+                        held = true
+                        state.pressed = false
+                        runCatching { requester.requestFocus() }
+                        Sounds.select()
+                        longClick?.invoke()
                     },
                 )
             }
             .onKeyEvent { e ->
                 if (onKey?.invoke(e) == true) return@onKeyEvent true
+                if (e.nativeKeyEvent.keyCode == NativeKeyEvent.KEYCODE_MENU && longClick != null) {
+                    if (e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0) { Sounds.select(); longClick?.invoke() }
+                    return@onKeyEvent true
+                }
                 if (!e.isSelect()) return@onKeyEvent false
                 when (e.type) {
                     KeyEventType.KeyDown -> {
                         if (e.nativeKeyEvent.repeatCount == 0) {
                             state.pressed = true
                             state.byKey = true
+                            held = false
+                            holdJob?.cancel()
+                            if (longClick != null) holdJob = scope.launch {
+                                delay(600)
+                                if (state.pressed && state.byKey) {
+                                    held = true
+                                    state.pressed = false
+                                    Sounds.select()
+                                    longClick?.invoke()
+                                }
+                            }
+                        } else if (state.byKey && !held && longClick != null) {
+                            held = true
+                            holdJob?.cancel()
+                            state.pressed = false
+                            Sounds.select()
+                            longClick?.invoke()
                         }
                         true
                     }
                     KeyEventType.KeyUp -> {
-                        val was = state.pressed && state.byKey
+                        holdJob?.cancel()
+                        val was = state.pressed && state.byKey && !held
                         state.pressed = false
                         state.byKey = false
                         if (was) {

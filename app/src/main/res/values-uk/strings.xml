@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="notice_source_limit">На головному екрані можна показати не більше трьох джерел.</string>
+    <string name="source_note_title">Додати примітку</string>
+    <string name="source_note_hint">Наприклад: ТБ, ігри або сімейні фільми</string>
+    <string name="st_glass_transparency">Прозорість скла</string>
+    <string name="st_glass_transparency_hint">Що вище значення, то краще видно шпалери під обома панелями.</string>
+    <string name="home_inputs_all">Усі входи</string>
+    <string name="home_wallpaper_next">Інше зображення</string>
+    <string name="home_inputs_title">Джерела</string>
+    <string name="home_inputs_open">Виберіть пристрій</string>
+    <string name="home_inputs_available">Вибрати</string>
     <string name="guard_name">Aerial Home Guard</string>
     <string name="guard_description">Залишає Aerial головним екраном на телевізорах, де його не можна змінити. Не читає вміст екрана.</string>
     <string name="greeting_morning">Доброго ранку</string>
@@ -162,11 +172,12 @@
     <string name="cc_inputs_boot">Під час вмикання телевізора (одне)</string>
     <string name="cc_inputs_boot_none">Нічого, залишатися в Aerial</string>
     <string name="cc_inputs_boot_hint">Перемикатися на це джерело під час вмикання телевізора або виходу зі сну. Кнопка «Додому» все одно повертає в Aerial.</string>
-    <string name="cc_inputs_pin_hint">Закріплені джерела з’являються плитками на початку головного екрана; виберіть одне, щоб одразу перемкнутися. Утримуйте плитку, щоб перемістити або прибрати її.</string>
+    <string name="cc_inputs_pin_hint">Вибрані джерела першими показуються в картці джерел на головному екрані. Відкрийте картку для вибору з усіх джерел.</string>
     <string name="menu_unpin_source">Прибрати з головного екрана</string>
     <string name="menu_source_device">Підключений пристрій</string>
     <string name="menu_source_plain">За замовчуванням</string>
     <string name="device_apple_tv">Apple TV</string>
+    <string name="device_google_tv">Google TV</string>
     <string name="device_playstation">PlayStation</string>
     <string name="device_switch">Nintendo Switch</string>
     <string name="device_xbox">Xbox</string>

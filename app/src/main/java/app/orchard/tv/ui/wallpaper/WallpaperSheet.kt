@@ -216,6 +216,11 @@ fun WallpaperSheet(
                         listOf(false to R.string.st_names_focused, true to R.string.st_names_all),
                         AerialSettings.showAllNames, AerialSettings::chooseShowAllNames,
                     )
+                    Choices(
+                        R.string.st_glass_transparency, stringResource(R.string.st_glass_transparency_hint), note,
+                        listOf(0, 25, 50, 75).map { it to "$it%" },
+                        AerialSettings.glassTransparency, AerialSettings::chooseGlassTransparency,
+                    )
                     // Apps taken off Home are kept with the rest of how Home looks.
                     SettingRow(R.string.st_hidden_apps, stringResource(R.string.st_hidden_apps_hint), note) {
                         ActionChip(

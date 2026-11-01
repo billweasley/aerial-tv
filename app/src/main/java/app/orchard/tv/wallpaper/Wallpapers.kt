@@ -235,6 +235,13 @@ object Wallpapers {
         rebuildBackdrop()
     }
 
+    /** Another cached daily picture, without repeating the picture currently on Home. */
+    fun shuffleDaily() {
+        val current = resolve()?.id
+        val next = items.filter { it.kind == WallpaperKind.Daily && it.id != current }.randomOrNull() ?: return
+        select(next.id)
+    }
+
     /**
      * A new install's screensaver follows the wallpaper. One that was already in use when that came
      * (1.38) keeps what it showed, aerial films, until the owner chooses. Kept either way, so it
