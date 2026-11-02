@@ -51,6 +51,7 @@ internal fun ContentShelf(app: AppEntry, items: List<HomeContent.Item>, selected
 ) {
     val item = items.getOrNull(selected) ?: return
     val live = item.kind == HomeContent.Kind.Live
+    val sourcesRequester = remember { FocusRequester() }
     // A nonzero alpha lets TextureView create its surface before the first-frame callback.
     // The input shelf remains visible until that callback confirms a real video frame.
     BoxWithConstraints(modifier.graphicsLayer { alpha = if (visible) 1f else .01f }) {
@@ -58,8 +59,8 @@ internal fun ContentShelf(app: AppEntry, items: List<HomeContent.Item>, selected
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 BasicText(app.label, style = Type.Title, modifier = Modifier.weight(1f))
-                Pressable(onClick = onSources, enabled = visible,
-                    modifier = Modifier.focusProperties { down = downRequester }) { state ->
+                Pressable(onClick = onSources, enabled = visible, focusRequester = sourcesRequester,
+                    modifier = Modifier.focusProperties { down = firstRequester }) { state ->
                     BasicText(stringResource(R.string.content_sources), style = Type.Body,
                         modifier = Modifier.clip(RoundedCornerShape(12.dp))
                             .background(Color.Black.copy(alpha = if (state.focused) .65f else .3f))
@@ -80,6 +81,7 @@ internal fun ContentShelf(app: AppEntry, items: List<HomeContent.Item>, selected
                         modifier = Modifier.width(if (live) 148.dp else 208.dp)
                             .focusProperties {
                                 down = downRequester
+                                up = sourcesRequester
                                 if (index == 0) left = FocusRequester.Cancel
                                 if (index == items.lastIndex) right = FocusRequester.Cancel
                             },
@@ -159,9 +161,13 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
     var firstFrame by remember(url) { mutableStateOf(false) }
     var buffering by remember(url) { mutableStateOf(true) }
     val player = remember(url) { ExoPlayer.Builder(context).build() }
+    var texture by remember(player) { mutableStateOf<TextureView?>(null) }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onRenderedFirstFrame() { firstFrame = true; ready() }
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                texture?.let { fitLiveTexture(it, videoSize) }
+            }
             override fun onPlayerError(error: PlaybackException) { failed() }
             override fun onPlaybackStateChanged(state: Int) {
                 buffering = state == Player.STATE_BUFFERING
@@ -182,6 +188,25 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
     LaunchedEffect(url, buffering, firstFrame) {
         if (buffering || !firstFrame) { delay(8_000); failed() }
     }
-    AndroidView(factory = { TextureView(it).also { view -> view.isFocusable = false; player.setVideoTextureView(view) } },
-        modifier = Modifier.fillMaxSize())
+    // AndroidView retains its factory across recompositions. A channel needs a fresh view as
+    // well as a fresh player, otherwise the new player has no surface and the old frame remains.
+    key(url) {
+        AndroidView(factory = { ctx -> TextureView(ctx).also { view ->
+            texture = view
+            view.isFocusable = false
+            view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitLiveTexture(view, player.videoSize) }
+            player.setVideoTextureView(view)
+        } }, update = { fitLiveTexture(it, player.videoSize) }, modifier = Modifier.fillMaxSize())
+    }
+}
+
+private fun fitLiveTexture(view: TextureView, size: androidx.media3.common.VideoSize) {
+    if (view.width <= 0 || view.height <= 0 || size.width <= 0 || size.height <= 0) return
+    val videoAspect = size.width * size.pixelWidthHeightRatio / size.height
+    val viewAspect = view.width.toFloat() / view.height
+    val sx = minOf(1f, videoAspect / viewAspect)
+    val sy = minOf(1f, viewAspect / videoAspect)
+    view.setTransform(android.graphics.Matrix().apply {
+        setScale(sx, sy, view.width / 2f, view.height / 2f)
+    })
 }

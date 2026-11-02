@@ -103,3 +103,27 @@ Do not equate a release build, parser fixture or provider test with live service
 Primary interface references: [Android TV channels](https://developer.android.com/training/tv/discovery/recommendations-channel),
 [Watch Next](https://developer.android.com/training/tv/discovery/watch-next), and
 [Media3 HLS](https://developer.android.com/media/media3/exoplayer/hls).
+
+## Xiaomi live verification, 1.76-inputs.5
+
+VersionCode 104 was installed in place on Xiaomi MFTR0 (Android 14) and compiled with `speed`.
+The existing mytv source was SMB. Its configuration process was frozen by the firmware, so TCP
+could connect while HTTP requests received no response. Temporarily unfreezing only that process
+allowed the read-only importer to resolve and import the existing 131-channel playlist. The source
+app's settings were not changed, and no persistent freezer setting was changed. An imported snapshot
+lets Home preview channels without depending on mytv's configuration process staying runnable.
+
+This pass also fixed channel switching: Compose retained the AndroidView factory when a different
+ExoPlayer was created, leaving the new player without a display surface. Each channel now creates
+its own TextureView, and the video keeps its aspect ratio. Card Up explicitly focuses Inputs;
+Down from that action returns to the selected channel.
+
+Real screenshots confirmed Tianjin Satellite TV playback, switching to Tianjin News with distinct
+news-channel content, continued changing frames after a nine-second follow-up, and the Inputs action
+restoring the original pinned-source shelf with focus on its first source. Home returned to Aerial;
+the guard stayed enabled. Both release flavors build and all 188 standard unit tests pass.
+Other platforms' account-personalized recommendations and the TCL revision remain unverified.
+
+For SMB import, an isolated computer-side Python environment can be prepared under the ignored
+local directory: `python3 -m venv local/live-preview-env`, followed by
+`local/live-preview-env/bin/python -m pip install smbprotocol`. Run the importer with that Python.
