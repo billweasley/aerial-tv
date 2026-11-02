@@ -22,7 +22,8 @@ The app does not run dumpsys, embed an ADB client, request DUMP, or open video p
 
 The daily wallpaper button chooses another cached daily image. The photo screensaver shuffles
 images, supports directional skipping, and gives captions 56 dp side margins and up to two lines.
-App recommendations remain a diagnostic experiment; there is no recommendation shelf in this build.
+The optional recommendation/live content shelf is described in [Home content](HOME-CONTENT.md);
+named services and TV behavior require validation before claiming compatibility.
 
 For compatible setups, the protected ConfigReceiver accepts `--ez capture_home_key true`.
 On Android 12 and newer, this opts into consuming Home while Aerial is resumed. It stops filtering

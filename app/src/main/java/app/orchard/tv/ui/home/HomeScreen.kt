@@ -81,6 +81,7 @@ import app.orchard.tv.CcPage
 import app.orchard.tv.apps.SourceLooks
 import app.orchard.tv.HomeViewModel
 import app.orchard.tv.Overlay
+import app.orchard.tv.system.HomeContent
 import app.orchard.tv.R
 import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.apps.AppEntry
@@ -307,12 +308,10 @@ fun HomeScreen(
     val pillRequester = remember { FocusRequester() }
     val firstSourceId = AerialSettings.orderedSourceIds(vm.sources.map { it.id }).firstOrNull { it in AerialSettings.pinnedSources }
     val wallpaperRequester = remember { FocusRequester() }
-    val canShuffleDaily = Wallpapers.items.count { it.kind == WallpaperKind.Daily } > 1
-    val showInputs = firstSourceId != null
+    val canShuffleDaily = AerialSettings.showDailyShuffle && Wallpapers.isDaily() &&
+        Wallpapers.items.count { it.kind == WallpaperKind.Daily } > 1
     val inputsRequester = firstSourceId?.let { requester(SOURCE_KEY_PREFIX + it) }
         ?: if (canShuffleDaily) wallpaperRequester else pillRequester
-    val shelfDownRequester = firstSourceId?.let { requester(SOURCE_KEY_PREFIX + it) }
-        ?: apps.firstOrNull()?.let { requester(it.key) } ?: FocusRequester.Cancel
     val appContext = LocalContext.current
     val firmwareInputPanel = remember {
         SystemProbe.tclInputPanel(appContext) != null || SystemProbe.coocaaInputPanel(appContext)
@@ -332,6 +331,57 @@ fun HomeScreen(
     val columns = AerialSettings.homeColumns
     val focusedRow = if (pillFocused || inputsFocused || focusedIndex < 0) 0 else focusedIndex / columns
     val gridEnabled = overlay == Overlay.None
+    var contentOwner by remember { mutableStateOf<String?>(null) }
+    var contentItems by remember { mutableStateOf<List<HomeContent.Item>>(emptyList()) }
+    var contentLoadedFor by remember { mutableStateOf<String?>(null) }
+    var contentDismissedFor by remember { mutableStateOf<String?>(null) }
+    var contentFocused by remember { mutableStateOf(false) }
+    var contentSelected by remember { mutableStateOf(0) }
+    var liveReady by remember { mutableStateOf(false) }
+    val contentRequester = remember { FocusRequester() }
+    val contentApp = apps.firstOrNull { it.key == contentOwner }
+    LaunchedEffect(AerialSettings.appPreviews, AerialSettings.previewDisabledApps, HomeContent.revision) {
+        contentDismissedFor = null
+    }
+    val contentEnabled = AerialSettings.appPreviews && vm.resumed && !vm.screensaverVisible &&
+        contentOwner != null && contentOwner !in AerialSettings.previewDisabledApps &&
+        contentOwner != contentDismissedFor && moving == null
+    LaunchedEffect(contentOwner, contentEnabled, HomeContent.revision) {
+        contentItems = emptyList(); contentLoadedFor = null; liveReady = false; contentSelected = 0
+        if (!contentEnabled) return@LaunchedEffect
+        val owner = contentOwner ?: return@LaunchedEffect
+        delay(450)
+        while (true) {
+            val loaded = runCatching { HomeContent.load(appContext, owner) }.getOrElse { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                emptyList()
+            }
+            val selectedId = contentItems.getOrNull(contentSelected)?.id
+            contentLoadedFor = owner
+            contentItems = loaded
+            contentSelected = loaded.indexOfFirst { it.id == selectedId }.takeIf { it >= 0 }
+                ?: contentSelected.coerceIn(0, (loaded.size - 1).coerceAtLeast(0))
+            if (contentFocused && loaded.isNotEmpty()) {
+                withFrameNanos { }
+                if (!runCatching { contentRequester.requestFocus() }.getOrDefault(false)) {
+                    contentFocused = false
+                    runCatching { requester(owner).requestFocus() }
+                }
+            }
+            delay(60_000)
+        }
+    }
+    val contentCandidate = contentEnabled && contentLoadedFor == contentOwner && contentItems.isNotEmpty() &&
+        overlay == Overlay.None && focusedRow == 0 && !inputsFocused && !pillFocused
+    val liveContent = contentCandidate && contentItems.getOrNull(contentSelected)?.kind == HomeContent.Kind.Live
+    val showContent = contentCandidate && (!liveContent || liveReady)
+    val showInputs = firstSourceId != null && !showContent
+    val shelfDownRequester = when {
+        showContent -> contentRequester
+        showInputs -> inputsRequester
+        else -> apps.firstOrNull()?.let { requester(it.key) } ?: FocusRequester.Cancel
+    }
+
     // A switch can change its SPD without unplugging the TV's HDMI cable. Refresh while Home
     // is visible, including the source menu. No polling while another app or HDMI is in front.
     LaunchedEffect(vm.resumed, app.orchard.tv.system.HdmiSpdSources.revision) {
@@ -460,7 +510,7 @@ fun HomeScreen(
     }
 
     // First focus once the apps are in; afterwards, put focus back wherever it was when an overlay closes.
-    LaunchedEffect(vm.loaded, overlay, showInputs) {
+    LaunchedEffect(vm.loaded, overlay, showInputs, canShuffleDaily) {
         if (!vm.loaded || overlay != Overlay.None) return@LaunchedEffect
         withFrameNanos { }
         val wanted = focusAfterOverlay
@@ -472,9 +522,12 @@ fun HomeScreen(
         if (inputsFocused && showInputs) runCatching { inputsRequester.requestFocus() }
         else if (inputsFocused) { inputsFocused = false; focusApp(lastFocusedIndex.coerceAtMost(columns - 1)) }
         else if (pillFocused && focusedKey != null) runCatching {
-            (if (wallpaperFocused) wallpaperRequester else pillRequester).requestFocus()
+            (if (wallpaperFocused && canShuffleDaily) wallpaperRequester else pillRequester).requestFocus()
         }
         else focusApp(if (index >= 0) index else if (wanted != null) indexAfterOverlay else lastFocusedIndex)
+    }
+    LaunchedEffect(showContent) {
+        if (!showContent && contentFocused) { contentFocused = false; focusApp(lastFocusedIndex.coerceAtMost(columns - 1)) }
     }
     // A folder whose last app left closes.
     LaunchedEffect(overlay, vm.folderApps) {
@@ -512,7 +565,8 @@ fun HomeScreen(
         val scrolled = dragged && scroll.value > 1f
         dragged = false
         // Handled even when that is turned off: unhandled, Back would close Home itself.
-        if (inputsFocused) focusApp(lastFocusedIndex.coerceAtMost(columns - 1))
+        if (contentFocused) { contentFocused = false; focusApp(lastFocusedIndex.coerceAtMost(columns - 1)) }
+        else if (inputsFocused) focusApp(lastFocusedIndex.coerceAtMost(columns - 1))
         else if (focusedRow > 0 || scrolled) focusApp(focusedIndex.coerceAtLeast(0) % columns)
         else if (AerialSettings.backStartsScreensaver) onStartScreensaver()
     }
@@ -661,9 +715,10 @@ fun HomeScreen(
         // drawn cuts no hole in the window, so the paused film showed as the window's black
         // (Xiaomi MiTV-MFTR0, the aerial wallpaper under Control Center).
         val filmMoves = vm.filmFront && overlay == Overlay.None && !vm.screensaverVisible && !pastShelf &&
-            !inGrid && moving == null
+            !inGrid && moving == null && !liveContent
         val sourceInput = Wallpapers.sourceInput
         when {
+            liveContent -> Unit
             Wallpapers.selectedId == Wallpapers.LIVE -> LiveWallpaper(
                 moving = filmMoves,
                 keep = vm.filmFront && (!vm.screensaverVisible || filmSaver),
@@ -779,7 +834,7 @@ fun HomeScreen(
                 val clockRight = AerialSettings.clockRight
                 // The large clock stands over the top row; the small one is the time and weather in
                 // one line, top left or beside the pill, so the wallpaper keeps the screen.
-                if (AerialSettings.largeClock) {
+                if (AerialSettings.largeClock && !showContent) {
                     ShelfClock(
                         now = now,
                         alignEnd = clockRight,
@@ -798,7 +853,7 @@ fun HomeScreen(
                         saving = vm.screensaverVisible,
                         away = carrying,
                     )
-                } else if (!clockRight) {
+                } else if (!clockRight && !showContent) {
                     CornerClock(
                         now = now,
                         modifier = Modifier
@@ -812,6 +867,38 @@ fun HomeScreen(
                         saving = vm.screensaverVisible,
                     )
                 }
+
+                if (contentCandidate && contentApp != null) ContentShelf(
+                    app = contentApp, items = contentItems, selected = contentSelected, visible = showContent,
+                    modifier = Modifier.padding(horizontal = metrics.margin - PlatePadH)
+                        .offset(y = 78.dp).fillMaxWidth()
+                        .height((metrics.topRowY - 104.dp).coerceIn(160.dp, 286.dp)),
+                    firstRequester = contentRequester,
+                    downRequester = requester(contentApp.key),
+                    onSelected = { index -> contentSelected = index },
+                    onFocused = { if (it) contentFocused = true },
+                    onOpen = { item ->
+                        val intent = HomeContent.contentIntent(appContext, contentApp.packageName, item.intent ?: item.stream)
+                        if (intent != null) onOpen(intent)
+                        else onLaunch(contentApp, Rect.Zero)
+                    },
+                    onSources = {
+                        contentDismissedFor = contentOwner; contentFocused = false
+                        if (firstSourceId == null) {
+                            vm.refreshSources()
+                            vm.overlay = Overlay.ControlCenter(CcPage.Inputs)
+                        } else scope.launch {
+                            withFrameNanos { }
+                            runCatching { inputsRequester.requestFocus() }
+                        }
+                    },
+                    onReady = { liveReady = true },
+                    onFailed = {
+                        val hadFocus = contentFocused
+                        contentDismissedFor = contentOwner; contentFocused = false
+                        if (hadFocus) scope.launch { withFrameNanos { }; focusApp(lastFocusedIndex) }
+                    },
+                )
 
                 // Use the empty area above the apps; keep a large clock on its own side.
                 val compactInputs = AerialSettings.largeClock
@@ -884,6 +971,9 @@ fun HomeScreen(
                             moving = moving == app.key,
                             appearDelayMs = (index * 28).coerceAtMost(320),
                             onFocused = {
+                                if (contentOwner != app.key) contentDismissedFor = null
+                                contentOwner = app.takeIf { it.source == null && it.folder == null && it.shortcut == null }?.key
+                                contentFocused = false
                                 focusedKey = app.key
                                 lastFocusedIndex = index
                                 pillFocused = false
@@ -919,7 +1009,7 @@ fun HomeScreen(
                             },
                             modifier = Modifier
                                 .diagLayer("tiles")
-                                .focusProperties { if (index < columns && moving == null) up = inputsRequester }
+                                .focusProperties { if (index < columns && moving == null) up = if (showContent) contentRequester else inputsRequester }
                                 // Lifted on the shelf with the plate; the clock above stays put.
                                 .offset { slot.value - IntOffset(0, lift.roundToInt()) }
                                 .then(

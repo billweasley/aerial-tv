@@ -2,6 +2,8 @@ package app.orchard.tv.update
 
 import android.os.Looper
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +30,7 @@ class UpdateCheckTest {
     private var checkedAt = 0L
     private var known = "1.69"
     private var calls = 0
+    private var enabled = true
     private var response: suspend () -> String = { "v1.70\n" }
     private val logs = mutableListOf<String>()
     private val checker = UpdateCheck(
@@ -37,12 +40,68 @@ class UpdateCheckTest {
         save = { version, at -> known = version; checkedAt = at },
         log = { logs += it },
         wallTime = { wall },
+        enabled = { enabled },
     )
 
     @After
     fun stop() {
         checker.setActive(false)
         scope.cancel()
+    }
+
+    @Test
+    fun disabledChecksNeverContactTheServerEvenWhenForced() {
+        enabled = false
+        checker.setActive(true)
+        checker.check(force = true)
+        checker.check(networkCameUp = true)
+        assertEquals(0, calls)
+        assertTrue(logs.last().contains("updates disabled"))
+    }
+
+    @Test
+    fun disablingCancelsAnInFlightCheckBeforeItCanPublish() {
+        val pending = CompletableDeferred<String>()
+        response = { pending.await() }
+        checker.check()
+        enabled = false
+        checker.policyChanged()
+        pending.complete("v9.99")
+        assertEquals("1.69", known)
+        assertEquals(0L, checkedAt)
+        assertTrue(checker.diagnostics.contains("inFlight=false"))
+    }
+
+    @Test
+    fun disablingRemovesFailedCheckRetriesUntilExplicitlyReenabled() {
+        response = { throw IOException() }
+        checker.setActive(true)
+        checker.check()
+        enabled = false
+        checker.policyChanged()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(40))
+        assertEquals(1, calls)
+        enabled = true
+        checker.policyChanged()
+        response = { "v1.70" }
+        checker.check()
+        assertEquals(2, calls)
+        assertEquals("1.70", known)
+    }
+
+    @Test
+    fun reenablingDuringCancellationChecksAgainWithoutPublishingTheCancelledResult() {
+        val pending = CompletableDeferred<String>()
+        response = { withContext(NonCancellable) { pending.await() } }
+        checker.check()
+        enabled = false
+        checker.policyChanged()
+        enabled = true
+        response = { "v1.70" }
+        checker.policyChanged()
+        pending.complete("v9.99")
+        assertEquals(2, calls)
+        assertEquals("1.70", known)
     }
 
     @Test

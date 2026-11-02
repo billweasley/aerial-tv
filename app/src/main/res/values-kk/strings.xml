@@ -253,4 +253,16 @@
     <string name="st_play_hint">Тыныштықта: жоғарғы қатарда (екі қатарлы көріністе — екеуінің кез келгенінде) 10 секундтан кейін; кез келген түйме тоқтатады. Әрдайым: түймелер тоқтатпайды, фон сәл күңгірттенеді; төмендегі қолданбаларға өткенде тоқтайды.</string>
     <string name="ss_show_time">Уақыт</string>
     <string name="ss_show_time_hint">Аэрожиын және фото экран қорғауыштарындағы уақыт. Экран күйіп қалмас үшін уақыт пен орын атауы анда-санда сәл жылжиды.</string>
+    <string name="st_disable_updates">Жаңартуларды өшіру</string>
+    <string name="st_disable_updates_hint">Жаңартуларды тексермеу, ұсынбау және жүктемеу. Осында қайта қосуға болады.</string>
+    <string name="st_daily_shuffle">Күнделікті сурет түймесі</string>
+    <string name="st_daily_shuffle_hint">Суретті ауыстыру түймесі тек күнделікті суреттерде көрсетіледі.</string>
+    <string name="st_app_previews">Қолданба мазмұнын алдын ала қарау</string>
+    <string name="st_app_previews_hint">Қолданбалар үстінде ұсыныстар не реттелген телеарналар көрсетіледі. Дерек болмаса, тұсқағаз бен кірістер қалады.</string>
+    <string name="st_preview_sound">Алдын ала қарау дыбысы</string>
+    <string name="st_preview_sound_hint">Бұл опция қосылмаса, тікелей эфир дыбыссыз болады.</string>
+    <string name="content_sources">Кірістер</string>
+    <string name="content_recommendation">Ұсыныстар</string>
+    <string name="content_continue">Қарауды жалғастыру</string>
+    <string name="content_live">Тікелей эфир</string>
 </resources>

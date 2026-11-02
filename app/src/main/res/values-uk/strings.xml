@@ -253,4 +253,16 @@
     <string name="st_play_hint">У спокої: через 10 секунд на верхньому ряду (у дворядному вигляді — на будь-якому з двох); будь-яка кнопка зупиняє. Завжди: кнопки не зупиняють, тло трохи затемнене; зупиняється, коли ви переходите до застосунків нижче.</string>
     <string name="ss_show_time">Час</string>
     <string name="ss_show_time_hint">Час на заставках з аерозйомкою і фото. Час і назва місця час від часу трохи зсуваються, щоб екран не вигорав.</string>
+    <string name="st_disable_updates">Вимкнути оновлення</string>
+    <string name="st_disable_updates_hint">Не перевіряти, не пропонувати й не завантажувати оновлення. Можна ввімкнути тут.</string>
+    <string name="st_daily_shuffle">Кнопка щоденних шпалер</string>
+    <string name="st_daily_shuffle_hint">Показувати зміну шпалер лише для щоденних зображень.</string>
+    <string name="st_app_previews">Перегляд вмісту застосунків</string>
+    <string name="st_app_previews_hint">Рекомендації та налаштовані телеканали над застосунками. Без даних залишаються шпалери та входи.</string>
+    <string name="st_preview_sound">Звук попереднього перегляду</string>
+    <string name="st_preview_sound_hint">Прямий ефір без звуку, доки цю опцію вимкнено.</string>
+    <string name="content_sources">Входи</string>
+    <string name="content_recommendation">Рекомендації</string>
+    <string name="content_continue">Продовжити перегляд</string>
+    <string name="content_live">Прямий ефір</string>
 </resources>

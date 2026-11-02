@@ -19,6 +19,7 @@ import app.orchard.tv.apps.SourceDevice
 import app.orchard.tv.apps.SourceLooks
 import app.orchard.tv.apps.TileArtFactory
 import app.orchard.tv.settings.AerialSettings
+import app.orchard.tv.system.HomeContent
 import app.orchard.tv.system.Diagnostics
 import app.orchard.tv.system.currentNetwork
 import app.orchard.tv.settings.FocusStyle
@@ -76,12 +77,31 @@ class PhoneServer private constructor(private val context: Context, private val 
                     val f = form(session)
                     val on = f["on"] == "1"
                     val known = when (f["key"]) {
+                        "updatesEnabled" -> { onMain { AerialSettings.chooseUpdatesEnabled(on) }; true }
+                        "showDailyShuffle" -> { onMain { AerialSettings.chooseShowDailyShuffle(on) }; true }
+                        "appPreviews" -> { onMain { AerialSettings.chooseAppPreviews(on) }; true }
+                        "previewSound" -> { onMain { AerialSettings.choosePreviewSound(on) }; true }
+                        "appPreview" -> {
+                            val pkg = f["app"].orEmpty()
+                            val exists = AppCatalog.loaded.any { it.packageName == pkg }
+                            if (exists) onMain { AerialSettings.chooseAppPreview(pkg, on) }
+                            exists
+                        }
                         "wallpaperAlwaysMoves" -> { onMain { AerialSettings.chooseWallpaperAlwaysMoves(on) }; true }
                         "showWeather" -> { onMain { AerialSettings.chooseShowWeather(on) }; true }
                         "screensaverClock" -> { onMain { AerialSettings.chooseScreensaverClock(on) }; true }
                         else -> false
                     }
                     json(state().put("saved", known))
+                }
+                session.method == Method.POST && path == "/api/content" -> {
+                    val f = form(session)
+                    val pkg = f["app"].orEmpty()
+                    val exists = AppCatalog.loaded.any { it.packageName == pkg }
+                    val saved = exists && runBlocking(Dispatchers.Main) {
+                        HomeContent.configure(context, pkg, f["feed"].orEmpty(), f["snapshot"].orEmpty())
+                    }
+                    json(state().put("saved", saved))
                 }
                 session.method == Method.POST && path == "/api/focus" -> {
                     val style = FocusStyle.of(form(session)["style"])
@@ -209,6 +229,18 @@ class PhoneServer private constructor(private val context: Context, private val 
             })
             .put("focusStyle", AerialSettings.focusStyle.key)
             .put("wallpaperAlwaysMoves", AerialSettings.wallpaperAlwaysMoves)
+            .put("updatesEnabled", AerialSettings.updatesEnabled)
+            .put("showDailyShuffle", AerialSettings.showDailyShuffle)
+            .put("appPreviews", AerialSettings.appPreviews)
+            .put("previewSound", AerialSettings.previewSound)
+            .put("previewDisabledApps", JSONArray(AerialSettings.previewDisabledApps.toList()))
+            .put("contentProfiles", JSONObject().apply {
+                AppCatalog.loaded.forEach { entry ->
+                    val profile = HomeContent.profile(context, entry.packageName)
+                    put(entry.packageName, JSONObject().put("feed", profile.feed)
+                        .put("hasSnapshot", profile.snapshot.isNotBlank()))
+                }
+            })
             .put("showWeather", AerialSettings.showWeather)
             .put("screensaverClock", AerialSettings.screensaverClock)
             .put("wallpapers", list)

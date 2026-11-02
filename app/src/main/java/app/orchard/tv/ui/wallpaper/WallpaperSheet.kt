@@ -177,6 +177,11 @@ fun WallpaperSheet(
                 Spacer(Modifier.height(16.dp))
                 SectionTitle(R.string.wp_wallpaper)
                 WallpaperRows(takeFocus)
+                if (Wallpapers.isDaily()) Group { note ->
+                    Choices(R.string.st_daily_shuffle, stringResource(R.string.st_daily_shuffle_hint), note,
+                        listOf(true to R.string.st_on, false to R.string.st_off),
+                        AerialSettings.showDailyShuffle, AerialSettings::chooseShowDailyShuffle, first = true)
+                }
                 // Only for the owner's videos: whether keys stop them. The aerial films always move.
                 if (Wallpapers.isVideo()) Group { note ->
                     Choices(
@@ -221,6 +226,12 @@ fun WallpaperSheet(
                         listOf(0, 25, 50, 75).map { it to "$it%" },
                         AerialSettings.glassTransparency, AerialSettings::chooseGlassTransparency,
                     )
+                    Choices(R.string.st_app_previews, stringResource(R.string.st_app_previews_hint), note,
+                        listOf(false to R.string.st_off, true to R.string.st_on),
+                        AerialSettings.appPreviews, AerialSettings::chooseAppPreviews)
+                    if (AerialSettings.appPreviews) Choices(R.string.st_preview_sound, stringResource(R.string.st_preview_sound_hint), note,
+                        listOf(false to R.string.st_off, true to R.string.st_on),
+                        AerialSettings.previewSound, AerialSettings::choosePreviewSound)
                     // Apps taken off Home are kept with the rest of how Home looks.
                     SettingRow(R.string.st_hidden_apps, stringResource(R.string.st_hidden_apps_hint), note) {
                         ActionChip(
@@ -346,6 +357,13 @@ fun WallpaperSheet(
                 SectionTitle(R.string.wp_weather)
                 Group(stringResource(if (Weather.chosen) R.string.wp_weather_chosen else R.string.wp_weather_guessed)) { note ->
                     SettingRow(R.string.wp_weather_city, null, note, first = true) { WeatherValue() }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Group { note ->
+                    Choices(R.string.st_disable_updates, stringResource(R.string.st_disable_updates_hint), note,
+                        listOf(true to R.string.st_on, false to R.string.st_off),
+                        !AerialSettings.updatesEnabled, { AerialSettings.chooseUpdatesEnabled(!it) }, first = true)
                 }
 
                 // One row says what it is; a title over it would only repeat it.

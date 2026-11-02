@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import android.os.SystemClock
 import android.provider.Settings
+import app.orchard.tv.update.Updates
 import app.orchard.tv.apps.IconLibrary
 import app.orchard.tv.guard.GuardSetup
 import app.orchard.tv.system.DeviceClass
@@ -112,6 +113,13 @@ object AerialSettings {
     var homePlate by mutableStateOf(true); private set
     var glassTransparency by mutableIntStateOf(0); private set
 
+    /** Custom builds update manually unless the owner explicitly enables the upstream updater. */
+    var updatesEnabled by mutableStateOf(false); private set
+    var showDailyShuffle by mutableStateOf(true); private set
+    var appPreviews by mutableStateOf(false); private set
+    var previewSound by mutableStateOf(false); private set
+    var previewDisabledApps by mutableStateOf<Set<String>>(emptySet()); private set
+
     /** The clock, with the date and weather, in the top right instead of the top left. */
     var clockRight by mutableStateOf(false); private set
 
@@ -205,6 +213,11 @@ object AerialSettings {
         largeClock = prefs.getBoolean("large_clock", false)
         homePlate = prefs.getBoolean("home_plate", true)
         glassTransparency = prefs.getInt("glass_transparency", 0).coerceIn(0, 75)
+        updatesEnabled = prefs.getBoolean("updates_enabled", false)
+        showDailyShuffle = prefs.getBoolean("show_daily_shuffle", true)
+        appPreviews = prefs.getBoolean("app_previews", false)
+        previewSound = prefs.getBoolean("preview_sound", false)
+        previewDisabledApps = prefs.getStringSet("preview_disabled_apps", emptySet())?.toSet() ?: emptySet()
         showAllNames = prefs.getBoolean("show_all_names", false)
         wallpaperAlwaysMoves = prefs.getBoolean("wallpaper_always_moves", false)
         showWeather = prefs.getBoolean("show_weather", true)
@@ -260,6 +273,32 @@ object AerialSettings {
 
     private fun hash(pin: String): String =
         MessageDigest.getInstance("SHA-256").digest("aerial:$pin".toByteArray()).joinToString("") { "%02x".format(it) }
+
+    fun chooseUpdatesEnabled(on: Boolean) {
+        updatesEnabled = on
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("updates_enabled", on) }
+        Updates.policyChanged()
+    }
+
+    fun chooseShowDailyShuffle(on: Boolean) {
+        showDailyShuffle = on
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("show_daily_shuffle", on) }
+    }
+
+    fun chooseAppPreviews(on: Boolean) {
+        appPreviews = on
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("app_previews", on) }
+    }
+
+    fun choosePreviewSound(on: Boolean) {
+        previewSound = on
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("preview_sound", on) }
+    }
+
+    fun chooseAppPreview(pkg: String, on: Boolean) {
+        previewDisabledApps = if (on) previewDisabledApps - pkg else previewDisabledApps + pkg
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putStringSet("preview_disabled_apps", previewDisabledApps) }
+    }
 
     fun chooseOneRowHome(on: Boolean) {
         oneRowHome = on

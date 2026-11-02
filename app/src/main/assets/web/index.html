@@ -339,6 +339,16 @@
   </div>
   <p class="foot" id="wxHint"></p>
 
+  <h2 data-i18n="content_h"></h2>
+  <div class="list">
+    <label class="item"><span class="txt" data-i18n="disable_updates"></span><input class="switch" type="checkbox" id="swDisableUpdates" data-setting="updatesEnabled" data-invert="1"></label>
+    <label class="item" id="dailyShuffleOption"><span class="txt" data-i18n="daily_shuffle"></span><input class="switch" type="checkbox" id="swDailyShuffle" data-setting="showDailyShuffle"></label>
+    <label class="item"><span class="txt" data-i18n="content_enable"></span><input class="switch" type="checkbox" id="swContent" data-setting="appPreviews"></label>
+    <label class="item" id="previewSoundOption"><span class="txt" data-i18n="content_sound"></span><input class="switch" type="checkbox" id="swPreviewSound" data-setting="previewSound"></label>
+  </div>
+  <p class="foot" data-i18n="content_hint"></p>
+  <div id="contentApps"></div>
+
   <h2 data-i18n="this_tv"></h2>
   <div class="list">
     <div class="item"><span class="txt" data-i18n="tv_model"></span><span class="val">{{DEVICE}}</span></div>
@@ -1099,6 +1109,12 @@ TEXTS.en.push("Add note", "For example: TV or games", "The note appears below th
 TEXTS.ru.push("Добавить заметку", "Например: ТВ или игры", "Заметка появится под названием устройства. Оставьте поле пустым для удаления.");
 TEXTS.uk.push("Додати примітку", "Наприклад: ТБ або ігри", "Примітка з’явиться під назвою пристрою. Залиште поле порожнім для видалення.");
 TEXTS.kk.push("Ескертпе қосу", "Мысалы: теледидар немесе ойындар", "Ескертпе құрылғы атауының астында көрсетіледі. Өшіру үшін бос қалдырыңыз.");
+KEYS.push("content_h","content_hint","disable_updates","daily_shuffle","content_enable","content_sound","content_apps","content_feed","content_feed_hint","content_import","content_imported","content_auto","content_clear");
+TEXTS.zh.push("应用内容与桌面选项","仅显示应用公开的推荐，或你配置的频道；读取失败时保留原壁纸和信号源。","禁用更新","每日图片换图按钮","应用内容预览","直播预览声音","按应用设置","直播列表或推荐订阅地址","留空使用系统推荐；支持 HTTP(S) M3U 或推荐订阅。","导入频道或推荐文件","已导入本地内容","自动读取系统推荐","清除内容配置");
+TEXTS.en.push("App content and Home options","Use recommendations published by apps or your configured channels. Missing content keeps wallpaper and inputs.","Disable updates","Daily picture button","App content previews","Live preview sound","Per-app settings","Playlist or recommendation feed URL","Leave blank for system recommendations. HTTP(S) M3U and recommendation feeds are supported.","Import channels or recommendations","Local content imported","System recommendations","Clear content configuration");
+TEXTS.ru.push("Контент приложений и главный экран","Рекомендации приложений или настроенные каналы. Без данных остаются обои и входы.","Отключить обновления","Кнопка ежедневных обоев","Предпросмотр приложений","Звук прямого эфира","Настройки приложений","Адрес списка каналов или рекомендаций","Пусто: системные рекомендации. Поддерживаются HTTP(S) M3U и списки рекомендаций.","Импорт каналов или рекомендаций","Локальный контент импортирован","Системные рекомендации","Очистить настройки контента");
+TEXTS.uk.push("Вміст застосунків і головний екран","Рекомендації застосунків або налаштовані канали. Без даних залишаються шпалери та входи.","Вимкнути оновлення","Кнопка щоденних шпалер","Попередній перегляд вмісту","Звук прямого ефіру","Налаштування застосунків","Адреса списку каналів або рекомендацій","Порожньо: системні рекомендації. Підтримуються HTTP(S) M3U та списки рекомендацій.","Імпорт каналів або рекомендацій","Локальний вміст імпортовано","Системні рекомендації","Очистити налаштування вмісту");
+TEXTS.kk.push("Қолданба мазмұны және басты экран","Қолданбалар ұсынған мазмұн не реттелген арналар. Дерексіз тұсқағаз бен кірістер сақталады.","Жаңартуларды өшіру","Күнделікті сурет түймесі","Мазмұнды алдын ала қарау","Тікелей эфир дыбысы","Қолданба баптаулары","Арналар немесе ұсыныстар мекенжайы","Бос болса: жүйелік ұсыныстар. HTTP(S) M3U және ұсыныс тізімдері қолданылады.","Арналар не ұсыныстарды импорттау","Жергілікті мазмұн импортталды","Жүйелік ұсыныстар","Мазмұн баптауларын тазарту");
 const LANGS = Object.keys(TEXTS);
 const LANG = (() => {
   const asked = new URLSearchParams(location.search).get('lang');
@@ -1420,6 +1436,13 @@ window.addEventListener('drop', e => {
 const weatherNames = { clear: t('wx_clear'), partlycloudy: t('wx_partlycloudy'), cloudy: t('wx_cloudy'), fog: t('wx_fog'), rain: t('wx_rain'), snow: t('wx_snow'), thunder: t('wx_thunder') };
 function renderMore() {
   $('#swWeather').checked = state.showWeather !== false;
+  $('#swDisableUpdates').checked = state.updatesEnabled !== true;
+  $('#swDailyShuffle').checked = state.showDailyShuffle !== false;
+  $('#dailyShuffleOption').hidden = !String(state.selected).startsWith('daily:');
+  $('#swContent').checked = !!state.appPreviews;
+  $('#swPreviewSound').checked = !!state.previewSound;
+  $('#previewSoundOption').hidden = !state.appPreviews;
+  renderContentApps();
   document.querySelectorAll('#focus [data-style]').forEach(b => b.setAttribute('aria-checked', b.dataset.style === state.focusStyle ? 'true' : 'false'));
   const w = state.weather || {};
   $('#wxNow').textContent = w.celsius !== undefined ? `${w.celsius}° ${weatherNames[w.kind] || ''}` : '—';
@@ -1459,17 +1482,74 @@ function renderInputs() {
     row.append(txt, sw); list.appendChild(row);
   }
 }
+let contentSignature = '';
+function renderContentApps() {
+  const root = $('#contentApps'); root.hidden = !state.appPreviews;
+  const apps = (state.apps || []).filter(a => !a.source && /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(a.key));
+  const signature = JSON.stringify([apps.map(a => [a.key, a.label]), state.previewDisabledApps, state.contentProfiles, LANG]);
+  if (signature === contentSignature) return;
+  contentSignature = signature; root.replaceChildren();
+  root.appendChild(el('h2', '', t('content_apps')));
+  const disabled = new Set(state.previewDisabledApps || []);
+  for (const app of apps) {
+    const profile = (state.contentProfiles || {})[app.key] || {};
+    const box = el('details', 'list');
+    const summary = el('summary', 'item');
+    summary.appendChild(el('span', 'txt', app.label));
+    const sw = el('input', 'switch'); sw.type = 'checkbox'; sw.checked = !disabled.has(app.key);
+    sw.onclick = e => e.stopPropagation();
+    sw.onchange = async () => {
+      sw.disabled = true;
+      try {
+        const next = await api('api/setting', { key: 'appPreview', app: app.key, on: sw.checked ? '1' : '0' });
+        if (!next.saved) throw new Error('not saved');
+        take(next);
+      } catch (e) { sw.checked = !sw.checked; toast(t('toast_set_fail')); }
+      sw.disabled = false;
+    };
+    summary.appendChild(sw); box.appendChild(summary);
+    box.appendChild(el('p', 'foot', profile.hasSnapshot ? t('content_imported') : t('content_auto')));
+    const form = el('form', 'item field');
+    const input = el('input'); input.type = 'url'; input.placeholder = t('content_feed'); input.value = profile.feed || '';
+    const save = el('button', 'link', t('save')); save.type = 'submit';
+    async function configure(feed, snapshot) {
+      try {
+        const next = await api('api/content', { app: app.key, feed, snapshot });
+        if (!next.saved) throw new Error('not saved');
+        take(next); toast(t('toast_tv_updated'));
+      } catch (e) { toast(t('toast_set_fail')); }
+    }
+    form.onsubmit = e => { e.preventDefault(); configure(input.value.trim(), ''); };
+    form.append(input, save); box.appendChild(form);
+    box.appendChild(el('p', 'foot', t('content_feed_hint')));
+    const upload = el('label', 'item tint', t('content_import'));
+    const file = el('input'); file.type = 'file'; file.accept = '.m3u,.m3u8,.txt,.json'; file.hidden = true;
+    file.onchange = async () => {
+      const chosen = file.files[0]; if (!chosen) return;
+      if (chosen.size > 2 * 1024 * 1024) { toast(t('toast_set_fail')); return; }
+      await configure('', await chosen.text());
+    };
+    upload.appendChild(file); box.appendChild(upload);
+    if (profile.feed || profile.hasSnapshot) {
+      const clear = el('button', 'item tint', t('content_clear'));
+      clear.onclick = () => configure('', ''); box.appendChild(clear);
+    }
+    root.appendChild(box);
+  }
+}
+
 /* On/off settings: data-setting is the key the TV knows it by. */
 async function setting(sw) {
   const on = sw.checked; sw.disabled = true;
   try {
-    const next = await api('api/setting', { key: sw.dataset.setting, on: on ? '1' : '0' });
+    const value = sw.dataset.invert ? !on : on;
+    const next = await api('api/setting', { key: sw.dataset.setting, on: value ? '1' : '0' });
     if (!next.saved) throw new Error('not saved');
     take(next); toast(t('toast_tv_updated'));
   } catch (e) { sw.checked = !on; toast(t('toast_set_fail')); }
   sw.disabled = false;
 }
-['#swSaverTime', '#swWeather'].forEach(id => $(id).onchange = () => setting($(id)));
+['#swSaverTime', '#swWeather', '#swDisableUpdates', '#swDailyShuffle', '#swContent', '#swPreviewSound'].forEach(id => $(id).onchange = () => setting($(id)));
 document.querySelectorAll('#focus [data-style]').forEach(b => b.onclick = async () => {
   if (b.dataset.style === state.focusStyle) return;
   try { take(await api('api/focus', { style: b.dataset.style })); toast(t('toast_tv_updated')); } catch (e) { toast(t('toast_set_fail')); }

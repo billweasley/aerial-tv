@@ -1,3 +1,7 @@
+Later revision: versionCode 103 / `1.76-inputs.4` adds optional updater/daily-picture controls and
+experimental app content. Version 102's Xiaomi verification below is historical and does not validate
+this new revision. See [content sources and validation limits](HOME-CONTENT.md).
+
 # Custom port to Aerial 1.76
 
 Upstream base: v1.76, commit 685890f. Custom version: versionCode 102 / `1.76-inputs.3`.

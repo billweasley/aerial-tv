@@ -236,7 +236,10 @@ object Wallpapers {
     }
 
     /** Another cached daily picture, without repeating the picture currently on Home. */
+    fun isDaily(): Boolean = selectedId.startsWith("daily:")
+
     fun shuffleDaily() {
+        if (!isDaily()) return
         val current = resolve()?.id
         val next = items.filter { it.kind == WallpaperKind.Daily && it.id != current }.randomOrNull() ?: return
         select(next.id)

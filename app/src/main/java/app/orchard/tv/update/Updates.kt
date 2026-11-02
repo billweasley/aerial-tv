@@ -1,5 +1,6 @@
 package app.orchard.tv.update
 
+import app.orchard.tv.settings.AerialSettings
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -74,10 +75,11 @@ object Updates {
 
     fun init(context: Context) {
         if (started) return
+        AerialSettings.init(context)
         started = true
         appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        available = prefs.getString("latest", null)?.takeIf { newer(it, current) }
+        available = prefs.getString("latest", null)?.takeIf { AerialSettings.updatesEnabled && newer(it, current) }
         checker = UpdateCheck(
             scope = scope,
             lastSuccess = { prefs.getLong("checked_at", 0) },
@@ -87,6 +89,7 @@ object Updates {
                 available = latest.takeIf { newer(it, current) }
             },
             log = { Log.i(TAG, it); DiagLog.i("update check: $it") },
+            enabled = { AerialSettings.updatesEnabled },
         )
         // A download left from an install that has since finished or been given up.
         scope.launch(Dispatchers.IO) {
@@ -112,8 +115,19 @@ object Updates {
         })
     }
 
+    fun policyChanged() {
+        if (!started) return
+        available = prefs.getString("latest", null)?.takeIf { AerialSettings.updatesEnabled && newer(it, current) }
+        checker?.policyChanged()
+        if (AerialSettings.updatesEnabled) checkIfStale()
+        else if (install is Install.Downloading) {
+            downloadJob?.cancel()
+            install = Install.Idle
+        }
+    }
+
     fun diagnostics(): String = if (!started) "not initialized" else
-        "known=${prefs.getString("latest", null) ?: "unknown"}; ${checker?.diagnostics}"
+        "enabled=${AerialSettings.updatesEnabled}, known=${prefs.getString("latest", null) ?: "unknown"}; ${checker?.diagnostics}"
 
     /** Whether version [a] comes after [b], comparing dotted numbers ("1.10" after "1.9"). */
     fun newer(a: String, b: String): Boolean {
@@ -178,7 +192,10 @@ object Updates {
      * ACTION_VIEW on the APK makes the installer itself the one installing. The APK must be this package, signed
      * with this copy's key and no older, or the installer would only fail with a less clear message.
      */
+    private var downloadJob: kotlinx.coroutines.Job? = null
+
     fun install(context: Context) {
+        if (!AerialSettings.updatesEnabled) return
         if (install is Install.Downloading) return
         // A second press while the first session's confirmation is awaited (#1004: two sessions).
         if (awaiting != null) return
@@ -203,13 +220,14 @@ object Updates {
             Log.i(TAG, "not allowed to install and no page to allow it on; trying the installer anyway")
         }
         install = Install.Downloading(0f)
-        scope.launch {
+        downloadJob = scope.launch {
             val file = apkFile(app)
             val ready = withContext(Dispatchers.IO) {
                 // A download kept from a moment ago, when the owner backed out of the installer.
                 verify(app, file)?.takeIf { testApk == null && it.versionName?.substringBefore('-') == available }
                     ?: downloadFrom(app, file)
             }
+            if (!AerialSettings.updatesEnabled) { install = Install.Idle; return@launch }
             val failure = when {
                 ready == null -> Failure.Download
                 !sameSigner(app, ready) -> Failure.NotOfficial

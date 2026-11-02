@@ -5,6 +5,9 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.annotation.MainThread
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -21,6 +24,7 @@ internal class UpdateCheck(
     private val log: (String) -> Unit,
     private val wallTime: () -> Long = System::currentTimeMillis,
     private val elapsedTime: () -> Long = SystemClock::elapsedRealtime,
+    private val enabled: () -> Boolean = { true },
 ) {
     companion object {
         const val MAX_AGE_MS = 3 * 60 * 60 * 1000L
@@ -35,6 +39,8 @@ internal class UpdateCheck(
     private val retry = Runnable { check(source = "retry") }
     private var active = false
     private var checking = false
+    private var task: Job? = null
+    private var checkAfterCancellation = false
     private var failures = 0
     private var retryAt: Long? = null
     private var attemptedAt: Long? = null
@@ -51,12 +57,29 @@ internal class UpdateCheck(
     }
 
     @MainThread
+    fun policyChanged() {
+        if (!enabled()) {
+            retryAt = null
+            failures = 0
+            checkAfterCancellation = false
+            task?.cancel()
+        } else if (checking) checkAfterCancellation = true
+        scheduleRetry()
+        record(if (enabled()) "updates enabled" else "updates disabled")
+    }
+
+    @MainThread
     fun check(
         force: Boolean = false,
         maxAgeMs: Long = MAX_AGE_MS,
         networkCameUp: Boolean = false,
         source: String = "home",
     ) {
+        if (!enabled()) {
+            handler.removeCallbacks(retry)
+            record("$source skipped: updates disabled")
+            return
+        }
         if (checking) {
             record("$source skipped: in flight")
             return
@@ -94,10 +117,12 @@ internal class UpdateCheck(
         attemptedAt = wallTime()
         attemptedElapsed = now
         record("$source started")
-        scope.launch {
+        task = scope.launch {
             try {
                 val latest = read().trim().removePrefix("v")
                 if (!latest.matches(Regex("\\d+(\\.\\d+)*"))) throw InvalidVersionResponse()
+                currentCoroutineContext().ensureActive()
+                if (!enabled()) return@launch
                 save(latest, wallTime())
                 failures = 0
                 result = "success version=$latest"
@@ -115,6 +140,10 @@ internal class UpdateCheck(
                 checking = false
                 scheduleRetry()
                 record("$source finished: $result")
+                if (checkAfterCancellation && enabled()) {
+                    checkAfterCancellation = false
+                    check(source = "enabled after cancellation")
+                }
             }
         }
     }
@@ -122,7 +151,7 @@ internal class UpdateCheck(
     private fun scheduleRetry() {
         handler.removeCallbacks(retry)
         val due = retryAt ?: return
-        if (active && !checking) handler.postDelayed(retry, (due - elapsedTime()).coerceAtLeast(0))
+        if (enabled() && active && !checking) handler.postDelayed(retry, (due - elapsedTime()).coerceAtLeast(0))
     }
 
     private fun record(event: String) {

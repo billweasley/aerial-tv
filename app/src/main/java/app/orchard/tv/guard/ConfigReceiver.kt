@@ -49,6 +49,10 @@ class ConfigReceiver : BroadcastReceiver() {
             resultData = org.json.JSONObject(app.orchard.tv.system.HdmiSpdSources.status).toString()
             return
         }
+        if (intent.hasExtra("updates_enabled") || intent.hasExtra("show_daily_shuffle") || intent.hasExtra("app_previews")) AerialSettings.init(context)
+        if (intent.hasExtra("updates_enabled")) AerialSettings.chooseUpdatesEnabled(intent.getBooleanExtra("updates_enabled", false))
+        if (intent.hasExtra("show_daily_shuffle")) AerialSettings.chooseShowDailyShuffle(intent.getBooleanExtra("show_daily_shuffle", true))
+        if (intent.hasExtra("app_previews")) AerialSettings.chooseAppPreviews(intent.getBooleanExtra("app_previews", false))
         if (intent.hasExtra("capture_home_key")) {
             GuardSetup.setCaptureHomeKey(context, intent.getBooleanExtra("capture_home_key", false))
         }
