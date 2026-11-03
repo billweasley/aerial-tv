@@ -23,6 +23,21 @@ internal object MytvContent {
         }
     }.getOrDefault(emptyList())
 
+    /** Watch Next is published by the player process even when its configuration process is frozen. */
+    internal fun followRecent(channels: List<HomeContent.Item>, recent: HomeContent.Item?, openedAt: Long = 0L): List<HomeContent.Item> {
+        if (recent == null || recent.engagedAt < openedAt) return emptyList()
+        fun name(text: String) = text.replace(Regex("[\\s·_-]"), "").replace(Regex("(?i)(高清|超清|标清|HD|FHD|UHD)$"), "")
+        val title = name(recent.title)
+        val subtitle = name(recent.subtitle)
+        val decoded = runCatching { android.net.Uri.decode(recent.intent.orEmpty()) }.getOrDefault("")
+        val matching = channels.filter { item ->
+            val label = name(item.title)
+            label.isNotEmpty() && (label == title || label == subtitle ||
+                item.stream?.let { stream -> decoded.contains(stream) } == true)
+        }
+        return matching.singleOrNull()?.let(::listOf) ?: emptyList()
+    }
+
     internal fun selectedSource(configs: JSONObject): JSONObject? {
         configs.optJSONObject("iptvSourceCurrent")?.let { return it }
         val list = configs.optJSONObject("iptvSourceList")?.optJSONArray("value") ?: return null

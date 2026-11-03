@@ -91,6 +91,8 @@ internal fun rememberStops(letGo: () -> Boolean): Int {
 class LiveFilm {
     var film by mutableStateOf<Aerial?>(null); internal set
     internal var player: ExoPlayer? = null
+    /** A rendered frame, separate from a player that is merely preparing. */
+    internal var showing by mutableStateOf(false)
 
     /**
      * Stopped on a frame that is not yet the wallpaper's picture, with the glass for it ready
@@ -165,6 +167,8 @@ fun LiveWallpaper(
     standIn: Boolean,
     /** A panel is over Home (a menu, Control Center): what it opens on waits for it to be in. */
     panel: Boolean = false,
+    /** A live-preview handoff keeps the normal picture until the wallpaper has a frame. */
+    keepPictureWhileLoading: Boolean = false,
     /** A screensaver is up in another format than the film's (Dolby Vision chosen): the TV goes black between them. */
     otherFormatSaver: Boolean,
     /** When a key was last pressed (uptimeMillis): a slow copy of the stopped film waits for quiet. Read, not observed. */
@@ -210,6 +214,7 @@ fun LiveWallpaper(
         live.insert = null
         live.film = null
         live.stopped = false
+        live.showing = false
         showing = false
         Wallpapers.dropFilmFrost()
     }
@@ -231,11 +236,13 @@ fun LiveWallpaper(
                     rendered = true
                     live.moved = true
                     showing = isPlaying
+                    live.showing = showing
                     failures = 0
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     showing = isPlaying && rendered
+                    live.showing = showing
                 }
 
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -491,11 +498,11 @@ fun LiveWallpaper(
         }
         val stale = keep && blackForStale && play
         if (keep) blackForStale = false
-        if (stale) {
+        if (stale && !keepPictureWhileLoading) {
             DiagLog.i("wallpaper: the picture is older than where the film was let go; black until the film")
             cover.snapTo(1f)
         }
-        val black = keep && (blackForFilm || stale) && play && cover.value > 0f
+        val black = keep && !keepPictureWhileLoading && (blackForFilm || stale) && play && cover.value > 0f
         if (keep) blackForFilm = false
         if (black) {
             // Black until the film's first frame; the picture only if it does not come.

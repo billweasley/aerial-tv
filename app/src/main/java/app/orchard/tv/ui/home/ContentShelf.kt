@@ -5,8 +5,6 @@ import android.view.TextureView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.*
@@ -25,6 +23,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -42,70 +43,52 @@ import kotlinx.coroutines.runInterruptible
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Top Shelf: real titles and artwork, with a persistent route back to inputs and the selected app. */
+/** A restrained Top Shelf: up to three wide covers, above the permanently visible input shelf. */
 @Composable
 internal fun ContentShelf(app: AppEntry, items: List<HomeContent.Item>, selected: Int,
-    visible: Boolean, modifier: Modifier, firstRequester: FocusRequester, downRequester: FocusRequester,
-    onSelected: (Int) -> Unit, onFocused: (Boolean) -> Unit, onOpen: (HomeContent.Item) -> Unit,
-    onSources: () -> Unit, onReady: () -> Unit, onFailed: () -> Unit,
+    modifier: Modifier, firstRequester: FocusRequester, downRequester: FocusRequester,
+    upRequester: FocusRequester, onSelected: (Int) -> Unit, onFocused: (Boolean) -> Unit,
+    onOpen: (HomeContent.Item) -> Unit,
 ) {
-    val item = items.getOrNull(selected) ?: return
-    val live = item.kind == HomeContent.Kind.Live
-    val sourcesRequester = remember { FocusRequester() }
-    // A nonzero alpha lets TextureView create its surface before the first-frame callback.
-    // The input shelf remains visible until that callback confirms a real video frame.
-    BoxWithConstraints(modifier.graphicsLayer { alpha = if (visible) 1f else .01f }) {
-        val posterHeight = (maxHeight - 120.dp).coerceIn(44.dp, 100.dp)
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                BasicText(app.label, style = Type.Title, modifier = Modifier.weight(1f))
-                Pressable(onClick = onSources, enabled = visible, focusRequester = sourcesRequester,
-                    modifier = Modifier.focusProperties { down = firstRequester }) { state ->
-                    BasicText(stringResource(R.string.content_sources), style = Type.Body,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black.copy(alpha = if (state.focused) .65f else .3f))
-                            .padding(horizontal = 14.dp, vertical = 8.dp))
-                }
-            }
-            if (live) {
-                Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(16.dp))) {
-                    LiveContent(item.stream.orEmpty(), onReady, onFailed)
-                    BasicText(item.title, style = Type.Title,
-                        modifier = Modifier.align(Alignment.BottomStart).background(Color.Black.copy(alpha = .55f)).padding(12.dp))
-                }
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(4.dp)) {
-                itemsIndexed(items, key = { index, i -> "${i.id}:$index" }) { index, entry ->
-                    Pressable(onClick = { onOpen(entry) }, enabled = visible,
-                        focusRequester = if (index == selected) firstRequester else null,
-                        modifier = Modifier.width(if (live) 148.dp else 208.dp)
-                            .focusProperties {
-                                down = downRequester
-                                up = sourcesRequester
+    BoxWithConstraints(modifier) {
+        val cardWidth = (maxWidth - 28.dp) / 3
+        val posterHeight = (maxHeight - 62.dp).coerceIn(48.dp, 102.dp)
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            BasicText(app.label, style = Type.Headline,
+                maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                items.take(HomeContent.HOME_RECOMMENDATIONS).forEachIndexed { index, entry ->
+                    key(entry.id, index) {
+                        Pressable(onClick = { onOpen(entry) },
+                            focusRequester = if (index == selected) firstRequester else null,
+                            modifier = Modifier.width(cardWidth).focusProperties {
+                                down = downRequester; up = upRequester
                                 if (index == 0) left = FocusRequester.Cancel
                                 if (index == items.lastIndex) right = FocusRequester.Cancel
-                            },
-                        focusedScale = 1.035f,
-                    ) { state ->
-                        LaunchedEffect(state.focused) { if (state.focused) { onSelected(index); onFocused(true) } }
-                        Column(Modifier.clip(RoundedCornerShape(14.dp))
-                            .background(Color.Black.copy(alpha = .48f))
-                            .smoothBorder(if (state.focused) 2.dp else 1.dp, if (state.focused) Color.White else Color.White.copy(alpha = .15f), 14.dp)
-                        ) {
-                            if (!live) ContentArt(entry.image, app.art.back, Modifier.fillMaxWidth().height(posterHeight))
-                            Column(Modifier.padding(10.dp)) {
-                                BasicText(entry.title, style = Type.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                BasicText(stringResource(when (entry.kind) {
-                                    HomeContent.Kind.Continue -> R.string.content_continue
-                                    HomeContent.Kind.Live -> R.string.content_live
-                                    else -> R.string.content_recommendation
-                                }), style = Type.Caption, maxLines = 1)
+                            }, focusedScale = 1.035f,
+                        ) { state ->
+                            LaunchedEffect(state.focused) { if (state.focused) { onSelected(index); onFocused(true) } }
+                            Column(Modifier.clip(RoundedCornerShape(14.dp))
+                                .background(Color.Black.copy(alpha = .36f))
+                                .smoothBorder(if (state.focused) 2.dp else 1.dp,
+                                    if (state.focused) Color.White else Color.White.copy(alpha = .16f), 14.dp)) {
+                                ContentArt(entry.image, app.art.back, Modifier.fillMaxWidth().height(posterHeight))
+                                BasicText(entry.title, style = Type.Body, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** The only live preview on Home: full screen, behind the fixed shelves, without channel controls. */
+@Composable
+internal fun LiveContentBackground(url: String, ready: Boolean, onReady: () -> Unit, onFailed: () -> Unit) {
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (ready) 1f else .01f }) {
+        LiveContent(url, onReady, onFailed)
     }
 }
 
@@ -162,9 +145,21 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
     var buffering by remember(url) { mutableStateOf(true) }
     val player = remember(url) { ExoPlayer.Builder(context).build() }
     var texture by remember(player) { mutableStateOf<TextureView?>(null) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(player, lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                // Compose may not draw another frame while the other app starts its decoder.
+                texture?.visibility = android.view.View.INVISIBLE
+                player.stop()
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
-            override fun onRenderedFirstFrame() { firstFrame = true; ready() }
+            override fun onRenderedFirstFrame() { firstFrame = true }
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
                 texture?.let { fitLiveTexture(it, videoSize) }
             }
@@ -180,6 +175,13 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
         player.prepare()
         player.playWhenReady = true
         onDispose { player.removeListener(listener); player.release() }
+    }
+    LaunchedEffect(url, firstFrame) {
+        if (firstFrame) {
+            // The render callback can precede TextureView composition. Reveal after it draws.
+            withFrameNanos { }; withFrameNanos { }
+            ready()
+        }
     }
     LaunchedEffect(AerialSettings.previewSound) {
         player.setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, AerialSettings.previewSound)
@@ -204,8 +206,8 @@ private fun fitLiveTexture(view: TextureView, size: androidx.media3.common.Video
     if (view.width <= 0 || view.height <= 0 || size.width <= 0 || size.height <= 0) return
     val videoAspect = size.width * size.pixelWidthHeightRatio / size.height
     val viewAspect = view.width.toFloat() / view.height
-    val sx = minOf(1f, videoAspect / viewAspect)
-    val sy = minOf(1f, viewAspect / videoAspect)
+    val sx = maxOf(1f, videoAspect / viewAspect)
+    val sy = maxOf(1f, viewAspect / videoAspect)
     view.setTransform(android.graphics.Matrix().apply {
         setScale(sx, sy, view.width / 2f, view.height / 2f)
     })

@@ -46,6 +46,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -77,6 +78,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.orchard.tv.CcPage
 import app.orchard.tv.apps.SourceLooks
 import app.orchard.tv.HomeViewModel
@@ -337,22 +341,43 @@ fun HomeScreen(
     var contentDismissedFor by remember { mutableStateOf<String?>(null) }
     var contentFocused by remember { mutableStateOf(false) }
     var contentSelected by remember { mutableStateOf(0) }
-    var liveReady by remember { mutableStateOf(false) }
+    var readyStream by remember { mutableStateOf<String?>(null) }
+    var contentSession by remember { mutableIntStateOf(0) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_RESUME) {
+                // A pause/resume can happen without a Compose frame between them. Clear the
+                // old channel synchronously instead of relying only on vm.resumed recomposition.
+                contentItems = emptyList(); contentLoadedFor = null; readyStream = null
+                contentDismissedFor = null
+                contentSession++
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     val contentRequester = remember { FocusRequester() }
+    LaunchedEffect(AerialSettings.previewLayoutNotice) {
+        if (AerialSettings.previewLayoutNotice) {
+            vm.notify(appContext.getString(R.string.st_previews_disabled_layout))
+            AerialSettings.clearPreviewLayoutNotice()
+        }
+    }
     val contentApp = apps.firstOrNull { it.key == contentOwner }
-    LaunchedEffect(AerialSettings.appPreviews, AerialSettings.previewDisabledApps, HomeContent.revision) {
+    LaunchedEffect(AerialSettings.appPreviews, AerialSettings.liveBackgroundPreview, AerialSettings.previewDisabledApps, HomeContent.revision) {
         contentDismissedFor = null
     }
-    val contentEnabled = AerialSettings.appPreviews && vm.resumed && !vm.screensaverVisible &&
+    val contentEnabled = (AerialSettings.appPreviews || AerialSettings.liveBackgroundPreview) && vm.resumed && !vm.screensaverVisible &&
         contentOwner != null && contentOwner !in AerialSettings.previewDisabledApps &&
         contentOwner != contentDismissedFor && moving == null
-    LaunchedEffect(contentOwner, contentEnabled, HomeContent.revision) {
-        contentItems = emptyList(); contentLoadedFor = null; liveReady = false; contentSelected = 0
+    LaunchedEffect(contentOwner, contentEnabled, contentSession, AerialSettings.appPreviews, AerialSettings.liveBackgroundPreview, HomeContent.revision) {
+        contentItems = emptyList(); contentLoadedFor = null; readyStream = null; contentSelected = 0
         if (!contentEnabled) return@LaunchedEffect
         val owner = contentOwner ?: return@LaunchedEffect
         delay(450)
-        while (true) {
-            val loaded = runCatching { HomeContent.load(appContext, owner) }.getOrElse { error ->
+        HomeContent.refreshes(appContext, owner).collect {
+            val loaded = runCatching { HomeContent.displayItems(HomeContent.load(appContext, owner), AerialSettings.appPreviews, AerialSettings.liveBackgroundPreview) }.getOrElse { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 emptyList()
             }
@@ -368,14 +393,15 @@ fun HomeScreen(
                     runCatching { requester(owner).requestFocus() }
                 }
             }
-            delay(60_000)
         }
     }
     val contentCandidate = contentEnabled && contentLoadedFor == contentOwner && contentItems.isNotEmpty() &&
-        overlay == Overlay.None && focusedRow == 0 && !inputsFocused && !pillFocused
+        overlay == Overlay.None && focusedRow == 0
     val liveContent = contentCandidate && contentItems.getOrNull(contentSelected)?.kind == HomeContent.Kind.Live
-    val showContent = contentCandidate && (!liveContent || liveReady)
-    val showInputs = firstSourceId != null && !showContent
+    val liveStream = contentItems.getOrNull(contentSelected)?.stream.takeIf { liveContent }
+    val liveReady = liveStream != null && readyStream == liveStream
+    val showContent = contentCandidate && !liveContent
+    val showInputs = firstSourceId != null
     val shelfDownRequester = when {
         showContent -> contentRequester
         showInputs -> inputsRequester
@@ -638,11 +664,11 @@ fun HomeScreen(
         }
         val collapsePx = with(density) { metrics.collapse.toPx() }
         val inputsMargin = metrics.margin - PlatePadH
-        val inputsWidth = if (largeClock) minOf(380.dp, maxWidth / 2 - inputsMargin) else maxWidth - inputsMargin * 2
+        val inputsWidth = maxWidth - inputsMargin * 2
         var inputsSize by remember { mutableStateOf(IntSize.Zero) }
-        val inputsHeight = with(density) { inputsSize.height.toDp() }.takeIf { it > 0.dp } ?: 145.dp
+        val inputsHeight = metrics.tileH + PlatePadV * 2
         val inputsY = (metrics.topRowY - PlatePadV - 10.dp - inputsHeight).coerceAtLeast(68.dp)
-        val inputsLeft = if (largeClock && !clockRightNow) maxWidth - inputsMargin - inputsWidth else inputsMargin
+        val inputsLeft = inputsMargin
         val inputsPlate = if (!showInputs || inputsSize == IntSize.Zero) null else with(density) {
             Rect(inputsLeft.toPx(), inputsY.toPx(), inputsLeft.toPx() + inputsSize.width, inputsY.toPx() + inputsSize.height)
         }
@@ -716,14 +742,18 @@ fun HomeScreen(
         // (Xiaomi MiTV-MFTR0, the aerial wallpaper under Control Center).
         val filmMoves = vm.filmFront && overlay == Overlay.None && !vm.screensaverVisible && !pastShelf &&
             !inGrid && moving == null && !liveContent
+        var previewHandover by remember { mutableStateOf(false) }
+        LaunchedEffect(liveContent, liveFilm.showing) {
+            if (liveContent) previewHandover = true
+            else if (liveFilm.showing) { withFrameNanos { }; withFrameNanos { }; previewHandover = false }
+        }
         val sourceInput = Wallpapers.sourceInput
         when {
-            liveContent -> Unit
             Wallpapers.selectedId == Wallpapers.LIVE -> LiveWallpaper(
                 moving = filmMoves,
-                keep = vm.filmFront && (!vm.screensaverVisible || filmSaver),
+                keep = vm.filmFront && (!vm.screensaverVisible || filmSaver) && !liveContent,
                 cover = filmCover,
-                hold = filmSaver && vm.filmFront,
+                hold = filmSaver && vm.filmFront && !liveContent,
                 // Control Center, Personalize and an app's menu on Home leave Home sharp (dimmed,
                 // above the sheet, beside the menu): the paused film stays. Swapped for its picture
                 // there, the background jumped (another plane and processing; a key frame a second
@@ -732,6 +762,7 @@ fun HomeScreen(
                 standIn = overlay == Overlay.None || overlay is Overlay.ControlCenter || overlay is Overlay.Wallpaper ||
                     (overlay is Overlay.AppMenu && overlay.inFolder == null),
                 panel = overlay != Overlay.None,
+                keepPictureWhileLoading = previewHandover,
                 otherFormatSaver = vm.screensaverVisible && !filmSaver && Wallpapers.screensaver == ScreensaverMode.Aerial &&
                     !AerialFormats.screensaverCarriesWallpaper(appContext),
                 lastInputAt = { vm.lastInputAt },
@@ -741,12 +772,32 @@ fun HomeScreen(
             Wallpapers.isVideo() -> key(Wallpapers.selectedId) {
                 VideoWallpaper(
                     moving = filmMoves,
-                    keep = vm.filmFront && !vm.screensaverVisible,
+                    keep = vm.filmFront && !vm.screensaverVisible && !liveContent,
                     lastInputAt = vm.lastInputAt,
                     cover = filmCover,
                 )
             }
-            sourceInput != null -> SourceWallpaper(sourceInput, show = vm.resumed && !vm.screensaverVisible, cover = filmCover)
+            sourceInput != null -> SourceWallpaper(sourceInput, show = vm.resumed && !vm.screensaverVisible && !liveContent, cover = filmCover)
+        }
+        var liveDecoderReady by remember { mutableStateOf(false) }
+        LaunchedEffect(liveStream, contentSession) {
+            readyStream = null; liveDecoderReady = false
+            if (liveContent) {
+                // Give the wallpaper its existing bounded frame capture before using its decoder.
+                val deadline = android.os.SystemClock.uptimeMillis() + 2_800
+                delay(100)
+                while (liveFilm.player != null && android.os.SystemClock.uptimeMillis() < deadline) delay(50)
+                if (liveFilm.player != null) liveFilm.letDecoderGo()
+                delay(100)
+                liveDecoderReady = true
+            } else filmCover.snapTo(0f)
+        }
+        if (liveContent && liveDecoderReady) liveStream?.let { stream ->
+            key(stream, contentSession) {
+                LiveContentBackground(stream, liveReady,
+                    onReady = { readyStream = stream },
+                    onFailed = { contentDismissedFor = contentOwner; readyStream = null })
+            }
         }
         Box(
             Modifier
@@ -805,7 +856,13 @@ fun HomeScreen(
                 plate = plate,
                 scroll = { scroll.value },
                 collapse = collapsePx,
-                cover = { filmCover.value },
+                cover = {
+                    when {
+                        liveContent -> if (liveReady) 1f else 0f
+                        previewHandover && Wallpapers.selectedId == Wallpapers.LIVE && !liveFilm.showing -> 0f
+                        else -> filmCover.value
+                    }
+                },
                 // A film kept moving, or an input's picture, gets the shade a picture has, so the
                 // top row reads over it without the plate. In the grid both give way to the
                 // glass, as any wallpaper does (an input's picture cannot be blurred).
@@ -834,7 +891,7 @@ fun HomeScreen(
                 val clockRight = AerialSettings.clockRight
                 // The large clock stands over the top row; the small one is the time and weather in
                 // one line, top left or beside the pill, so the wallpaper keeps the screen.
-                if (AerialSettings.largeClock && !showContent) {
+                if (AerialSettings.largeClock && !showContent && !liveContent) {
                     ShelfClock(
                         now = now,
                         alignEnd = clockRight,
@@ -868,53 +925,36 @@ fun HomeScreen(
                     )
                 }
 
-                if (contentCandidate && contentApp != null) ContentShelf(
-                    app = contentApp, items = contentItems, selected = contentSelected, visible = showContent,
-                    modifier = Modifier.padding(horizontal = metrics.margin - PlatePadH)
-                        .offset(y = 78.dp).fillMaxWidth()
-                        .height((metrics.topRowY - 104.dp).coerceIn(160.dp, 286.dp)),
+                if (showContent && contentApp != null) ContentShelf(
+                    app = contentApp, items = contentItems, selected = contentSelected,
+                    modifier = Modifier.padding(horizontal = inputsMargin)
+                        .offset(y = 76.dp).fillMaxWidth()
+                        .height(((if (showInputs) inputsY else metrics.topRowY - 22.dp) - 88.dp).coerceIn(90.dp, 200.dp)),
                     firstRequester = contentRequester,
-                    downRequester = requester(contentApp.key),
-                    onSelected = { index -> contentSelected = index },
-                    onFocused = { if (it) contentFocused = true },
-                    onOpen = { item ->
-                        val intent = HomeContent.contentIntent(appContext, contentApp.packageName, item.intent ?: item.stream)
-                        if (intent != null) onOpen(intent)
-                        else onLaunch(contentApp, Rect.Zero)
-                    },
-                    onSources = {
-                        contentDismissedFor = contentOwner; contentFocused = false
-                        if (firstSourceId == null) {
-                            vm.refreshSources()
-                            vm.overlay = Overlay.ControlCenter(CcPage.Inputs)
-                        } else scope.launch {
-                            withFrameNanos { }
-                            runCatching { inputsRequester.requestFocus() }
-                        }
-                    },
-                    onReady = { liveReady = true },
-                    onFailed = {
-                        val hadFocus = contentFocused
-                        contentDismissedFor = contentOwner; contentFocused = false
-                        if (hadFocus) scope.launch { withFrameNanos { }; focusApp(lastFocusedIndex) }
-                    },
+                    downRequester = if (showInputs) inputsRequester else requester(contentApp.key),
+                    upRequester = if (canShuffleDaily) wallpaperRequester else pillRequester,
+                    onSelected = { contentSelected = it },
+                    onFocused = { if (it) { contentFocused = true; inputsFocused = false; pillFocused = false } },
+                    onOpen = { item -> HomeContent.contentIntent(appContext, contentApp.packageName, item.intent)?.let {
+                        HomeContent.appOpened(appContext, contentApp.packageName)
+                        onOpen(it)
+                    } },
                 )
 
                 // Use the empty area above the apps; keep a large clock on its own side.
-                val compactInputs = AerialSettings.largeClock
                 if (showInputs) InputsCard(
                     sources = vm.sources,
-                    compact = compactInputs,
+                    tileHeight = metrics.tileH,
                     enabled = gridEnabled && (moving == null || moving.startsWith(SOURCE_KEY_PREFIX)) && !inGrid && !vm.screensaverVisible,
                     focusRequester = inputsRequester,
                     sourceRequester = { requester(SOURCE_KEY_PREFIX + it.id) },
                     movingKey = moving,
-                    upRequester = if (canShuffleDaily) wallpaperRequester else pillRequester,
+                    upRequester = if (showContent) contentRequester else if (canShuffleDaily) wallpaperRequester else pillRequester,
                     downRequester = apps.getOrNull(lastFocusedIndex.coerceAtMost(columns - 1))?.let { requester(it.key) },
                     onFocused = { gained ->
                         if (gained) {
                             if (focusedKey == null && apps.isNotEmpty()) focusApp(0)
-                            else { inputsFocused = true; pillFocused = false }
+                            else { inputsFocused = true; contentFocused = false; pillFocused = false }
                         }
                     },
                     onClick = {
@@ -934,7 +974,7 @@ fun HomeScreen(
                         vm.overlay = Overlay.AppMenu(SOURCE_KEY_PREFIX + source.id, bounds)
                     },
                     modifier = Modifier
-                        .align(if (compactInputs && !clockRight) Alignment.TopEnd else Alignment.TopStart)
+                        .align(Alignment.TopStart)
                         .padding(horizontal = inputsMargin)
                         .offset { IntOffset(0, with(density) { inputsY.roundToPx() } - lift.roundToInt()) }
                         .width(inputsWidth)
@@ -984,7 +1024,10 @@ fun HomeScreen(
                                 val mover = moving
                                 if (mover == null) {
                                     val folder = app.folder
-                                    if (folder == null) onLaunch(app, bounds)
+                                    if (folder == null) {
+                                        HomeContent.appOpened(appContext, app.packageName)
+                                        onLaunch(app, bounds)
+                                    }
                                     else {
                                         // Closing the folder comes back to its tile.
                                         focusAfterOverlay = app.key
@@ -1009,7 +1052,7 @@ fun HomeScreen(
                             },
                             modifier = Modifier
                                 .diagLayer("tiles")
-                                .focusProperties { if (index < columns && moving == null) up = if (showContent) contentRequester else inputsRequester }
+                                .focusProperties { if (index < columns && moving == null) up = if (showInputs) inputsRequester else if (showContent) contentRequester else inputsRequester }
                                 // Lifted on the shelf with the plate; the clock above stays put.
                                 .offset { slot.value - IntOffset(0, lift.roundToInt()) }
                                 .then(

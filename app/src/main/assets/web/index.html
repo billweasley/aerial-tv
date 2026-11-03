@@ -344,6 +344,7 @@
     <label class="item"><span class="txt" data-i18n="disable_updates"></span><input class="switch" type="checkbox" id="swDisableUpdates" data-setting="updatesEnabled" data-invert="1"></label>
     <label class="item" id="dailyShuffleOption"><span class="txt" data-i18n="daily_shuffle"></span><input class="switch" type="checkbox" id="swDailyShuffle" data-setting="showDailyShuffle"></label>
     <label class="item"><span class="txt" data-i18n="content_enable"></span><input class="switch" type="checkbox" id="swContent" data-setting="appPreviews"></label>
+    <label class="item"><span class="txt" data-i18n="live_background"></span><input class="switch" type="checkbox" id="swLiveBackground" data-setting="liveBackgroundPreview"></label>
     <label class="item" id="previewSoundOption"><span class="txt" data-i18n="content_sound"></span><input class="switch" type="checkbox" id="swPreviewSound" data-setting="previewSound"></label>
   </div>
   <p class="foot" data-i18n="content_hint"></p>
@@ -1110,11 +1111,17 @@ TEXTS.ru.push("Добавить заметку", "Например: ТВ или 
 TEXTS.uk.push("Додати примітку", "Наприклад: ТБ або ігри", "Примітка з’явиться під назвою пристрою. Залиште поле порожнім для видалення.");
 TEXTS.kk.push("Ескертпе қосу", "Мысалы: теледидар немесе ойындар", "Ескертпе құрылғы атауының астында көрсетіледі. Өшіру үшін бос қалдырыңыз.");
 KEYS.push("content_h","content_hint","disable_updates","daily_shuffle","content_enable","content_sound","content_apps","content_feed","content_feed_hint","content_import","content_imported","content_auto","content_clear");
-TEXTS.zh.push("应用内容与桌面选项","仅显示应用公开的推荐，或你配置的频道；读取失败时保留原壁纸和信号源。","禁用更新","每日图片换图按钮","应用内容预览","直播预览声音","按应用设置","直播列表或推荐订阅地址","留空使用系统推荐；支持 HTTP(S) M3U 或推荐订阅。","导入频道或推荐文件","已导入本地内容","自动读取系统推荐","清除内容配置");
-TEXTS.en.push("App content and Home options","Use recommendations published by apps or your configured channels. Missing content keeps wallpaper and inputs.","Disable updates","Daily picture button","App content previews","Live preview sound","Per-app settings","Playlist or recommendation feed URL","Leave blank for system recommendations. HTTP(S) M3U and recommendation feeds are supported.","Import channels or recommendations","Local content imported","System recommendations","Clear content configuration");
-TEXTS.ru.push("Контент приложений и главный экран","Рекомендации приложений или настроенные каналы. Без данных остаются обои и входы.","Отключить обновления","Кнопка ежедневных обоев","Предпросмотр приложений","Звук прямого эфира","Настройки приложений","Адрес списка каналов или рекомендаций","Пусто: системные рекомендации. Поддерживаются HTTP(S) M3U и списки рекомендаций.","Импорт каналов или рекомендаций","Локальный контент импортирован","Системные рекомендации","Очистить настройки контента");
-TEXTS.uk.push("Вміст застосунків і головний екран","Рекомендації застосунків або налаштовані канали. Без даних залишаються шпалери та входи.","Вимкнути оновлення","Кнопка щоденних шпалер","Попередній перегляд вмісту","Звук прямого ефіру","Налаштування застосунків","Адреса списку каналів або рекомендацій","Порожньо: системні рекомендації. Підтримуються HTTP(S) M3U та списки рекомендацій.","Імпорт каналів або рекомендацій","Локальний вміст імпортовано","Системні рекомендації","Очистити налаштування вмісту");
-TEXTS.kk.push("Қолданба мазмұны және басты экран","Қолданбалар ұсынған мазмұн не реттелген арналар. Дерексіз тұсқағаз бен кірістер сақталады.","Жаңартуларды өшіру","Күнделікті сурет түймесі","Мазмұнды алдын ала қарау","Тікелей эфир дыбысы","Қолданба баптаулары","Арналар немесе ұсыныстар мекенжайы","Бос болса: жүйелік ұсыныстар. HTTP(S) M3U және ұсыныс тізімдері қолданылады.","Арналар не ұсыныстарды импорттау","Жергілікті мазмұн импортталды","Жүйелік ұсыныстар","Мазмұн баптауларын тазарту");
+TEXTS.zh.push("应用内容与桌面选项","最多显示三条内容，选中期间每分钟刷新。","禁用更新","每日图片换图按钮","视频与音乐推荐","直播预览声音","按应用设置","直播列表或推荐订阅地址","留空使用系统推荐；支持 HTTP(S) M3U 或推荐订阅。","导入频道或推荐文件","已导入本地内容","自动读取系统推荐","清除内容配置");
+TEXTS.en.push("App content and Home options","Show up to three items, refreshed every minute while selected.","Disable updates","Daily picture button","Video and music recommendations","Live preview sound","Per-app settings","Playlist or recommendation feed URL","Leave blank for system recommendations. HTTP(S) M3U and recommendation feeds are supported.","Import channels or recommendations","Local content imported","System recommendations","Clear content configuration");
+TEXTS.ru.push("Контент приложений и главный экран","До трёх карточек с обновлением каждую минуту, пока приложение выбрано.","Отключить обновления","Кнопка ежедневных обоев","Рекомендации видео и музыки","Звук прямого эфира","Настройки приложений","Адрес списка каналов или рекомендаций","Пусто: системные рекомендации. Поддерживаются HTTP(S) M3U и списки рекомендаций.","Импорт каналов или рекомендаций","Локальный контент импортирован","Системные рекомендации","Очистить настройки контента");
+TEXTS.uk.push("Вміст застосунків і головний екран","До трьох карток з оновленням щохвилини, поки застосунок вибрано.","Вимкнути оновлення","Кнопка щоденних шпалер","Рекомендації відео та музики","Звук прямого ефіру","Налаштування застосунків","Адреса списку каналів або рекомендацій","Порожньо: системні рекомендації. Підтримуються HTTP(S) M3U та списки рекомендацій.","Імпорт каналів або рекомендацій","Локальний вміст імпортовано","Системні рекомендації","Очистити налаштування вмісту");
+TEXTS.kk.push("Қолданба мазмұны және басты экран","Қолданба таңдалғанда минут сайын жаңаратын үш ұсынысқа дейін.","Жаңартуларды өшіру","Күнделікті сурет түймесі","Бейне және музыка ұсыныстары","Тікелей эфир дыбысы","Қолданба баптаулары","Арналар немесе ұсыныстар мекенжайы","Бос болса: жүйелік ұсыныстар. HTTP(S) M3U және ұсыныс тізімдері қолданылады.","Арналар не ұсыныстарды импорттау","Жергілікті мазмұн импортталды","Жүйелік ұсыныстар","Мазмұн баптауларын тазарту");
+KEYS.push("live_background");
+TEXTS.zh.push("电视直播背景预览");
+TEXTS.en.push("Live TV background preview");
+TEXTS.ru.push("Прямой эфир на фоне");
+TEXTS.uk.push("Прямий ефір на тлі");
+TEXTS.kk.push("Фондағы тікелей эфир");
 const LANGS = Object.keys(TEXTS);
 const LANG = (() => {
   const asked = new URLSearchParams(location.search).get('lang');
@@ -1440,8 +1447,9 @@ function renderMore() {
   $('#swDailyShuffle').checked = state.showDailyShuffle !== false;
   $('#dailyShuffleOption').hidden = !String(state.selected).startsWith('daily:');
   $('#swContent').checked = !!state.appPreviews;
+  $('#swLiveBackground').checked = !!state.liveBackgroundPreview;
   $('#swPreviewSound').checked = !!state.previewSound;
-  $('#previewSoundOption').hidden = !state.appPreviews;
+  $('#previewSoundOption').hidden = !state.liveBackgroundPreview;
   renderContentApps();
   document.querySelectorAll('#focus [data-style]').forEach(b => b.setAttribute('aria-checked', b.dataset.style === state.focusStyle ? 'true' : 'false'));
   const w = state.weather || {};
@@ -1484,7 +1492,7 @@ function renderInputs() {
 }
 let contentSignature = '';
 function renderContentApps() {
-  const root = $('#contentApps'); root.hidden = !state.appPreviews;
+  const root = $('#contentApps'); root.hidden = !state.appPreviews && !state.liveBackgroundPreview;
   const apps = (state.apps || []).filter(a => !a.source && /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(a.key));
   const signature = JSON.stringify([apps.map(a => [a.key, a.label]), state.previewDisabledApps, state.contentProfiles, LANG]);
   if (signature === contentSignature) return;
@@ -1549,7 +1557,7 @@ async function setting(sw) {
   } catch (e) { sw.checked = !on; toast(t('toast_set_fail')); }
   sw.disabled = false;
 }
-['#swSaverTime', '#swWeather', '#swDisableUpdates', '#swDailyShuffle', '#swContent', '#swPreviewSound'].forEach(id => $(id).onchange = () => setting($(id)));
+['#swSaverTime', '#swWeather', '#swDisableUpdates', '#swDailyShuffle', '#swContent', '#swLiveBackground', '#swPreviewSound'].forEach(id => $(id).onchange = () => setting($(id)));
 document.querySelectorAll('#focus [data-style]').forEach(b => b.onclick = async () => {
   if (b.dataset.style === state.focusStyle) return;
   try { take(await api('api/focus', { style: b.dataset.style })); toast(t('toast_tv_updated')); } catch (e) { toast(t('toast_set_fail')); }

@@ -4,8 +4,9 @@ This customization is based on upstream Aerial v1.76 (685890f). See [port and va
 The original project and its MIT license are retained.
 
 A single source shelf sits directly above the app shelf, including in the single-row layout.
-Both shelves use the same glass renderer and aligned outer edges. The small header reads
-“信号源” in Chinese. Choose and order up to three sources through the existing TV or phone
+Both shelves use the same glass renderer and aligned outer edges. Source cards use the app
+card height, including when previews are enabled; there is no redundant shelf title.
+Choose and order up to three sources through the existing TV or phone
 settings. Each source opens directly; the final action opens the full list. With no available
 pinned sources, the shelf and its glass plate disappear and directional navigation skips them.
 Long-press a source to move it or add a note. Notes preserve its device name. Personalization

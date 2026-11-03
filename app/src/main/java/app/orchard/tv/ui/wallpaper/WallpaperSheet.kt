@@ -229,7 +229,10 @@ fun WallpaperSheet(
                     Choices(R.string.st_app_previews, stringResource(R.string.st_app_previews_hint), note,
                         listOf(false to R.string.st_off, true to R.string.st_on),
                         AerialSettings.appPreviews, AerialSettings::chooseAppPreviews)
-                    if (AerialSettings.appPreviews) Choices(R.string.st_preview_sound, stringResource(R.string.st_preview_sound_hint), note,
+                    Choices(R.string.st_live_background, stringResource(R.string.st_live_background_hint), note,
+                        listOf(false to R.string.st_off, true to R.string.st_on),
+                        AerialSettings.liveBackgroundPreview, AerialSettings::chooseLiveBackgroundPreview)
+                    if (AerialSettings.liveBackgroundPreview) Choices(R.string.st_preview_sound, stringResource(R.string.st_preview_sound_hint), note,
                         listOf(false to R.string.st_off, true to R.string.st_on),
                         AerialSettings.previewSound, AerialSettings::choosePreviewSound)
                     // Apps taken off Home are kept with the rest of how Home looks.

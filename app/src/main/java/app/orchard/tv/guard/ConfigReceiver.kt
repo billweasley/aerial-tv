@@ -49,9 +49,10 @@ class ConfigReceiver : BroadcastReceiver() {
             resultData = org.json.JSONObject(app.orchard.tv.system.HdmiSpdSources.status).toString()
             return
         }
-        if (intent.hasExtra("updates_enabled") || intent.hasExtra("show_daily_shuffle") || intent.hasExtra("app_previews")) AerialSettings.init(context)
+        if (intent.hasExtra("updates_enabled") || intent.hasExtra("show_daily_shuffle") || intent.hasExtra("app_previews") || intent.hasExtra("live_background_preview")) AerialSettings.init(context)
         if (intent.hasExtra("updates_enabled")) AerialSettings.chooseUpdatesEnabled(intent.getBooleanExtra("updates_enabled", false))
         if (intent.hasExtra("show_daily_shuffle")) AerialSettings.chooseShowDailyShuffle(intent.getBooleanExtra("show_daily_shuffle", true))
+        if (intent.hasExtra("live_background_preview")) AerialSettings.chooseLiveBackgroundPreview(intent.getBooleanExtra("live_background_preview", false))
         if (intent.hasExtra("app_previews")) AerialSettings.chooseAppPreviews(intent.getBooleanExtra("app_previews", false))
         if (intent.hasExtra("capture_home_key")) {
             GuardSetup.setCaptureHomeKey(context, intent.getBooleanExtra("capture_home_key", false))
@@ -59,6 +60,12 @@ class ConfigReceiver : BroadcastReceiver() {
         if (intent.getBooleanExtra("personalize", false)) {
             app.orchard.tv.apps.AppCatalog.openPersonalize?.invoke()
             resultData = "Personalization requested"
+            return
+        }
+        intent.getStringExtra("recent_content")?.let { pkg ->
+            val item = app.orchard.tv.system.HomeContent.recentItem(context, pkg)
+            resultData = if (item == null) "{}" else org.json.JSONObject()
+                .put("title", item.title).put("subtitle", item.subtitle).put("intent", item.intent).toString()
             return
         }
         intent.getStringExtra("recommendation_package")?.let {

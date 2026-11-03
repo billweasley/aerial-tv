@@ -264,12 +264,15 @@
     <string name="st_disable_updates_hint">停止检查、提示和下载更新；需要时可在这里重新开启。</string>
     <string name="st_daily_shuffle">每日图片换图按钮</string>
     <string name="st_daily_shuffle_hint">仅在使用每日图片时显示“换一张壁纸”。</string>
-    <string name="st_app_previews">应用内容预览</string>
-    <string name="st_app_previews_hint">在应用上方显示已发布的推荐或已配置的直播频道；没有可用内容时保留壁纸和信号源。</string>
+    <string name="st_app_previews">视频与音乐推荐</string>
+    <string name="st_app_previews_hint">最多显示三条内容，选中期间每分钟刷新。</string>
     <string name="st_preview_sound">预览声音</string>
     <string name="st_preview_sound_hint">默认静音，开启后直播预览会播放声音。</string>
     <string name="content_sources">信号源</string>
     <string name="content_recommendation">推荐</string>
     <string name="content_continue">继续观看</string>
     <string name="content_live">直播</string>
+    <string name="st_live_background">电视直播背景预览</string>
+    <string name="st_live_background_hint">全屏预览直播应用上次观看的频道；读不到或频道失效时恢复正常背景。</string>
+    <string name="st_previews_disabled_layout">已固定信号源并启用两排应用，视频与音乐推荐已自动关闭。</string>
 </resources>

@@ -79,6 +79,7 @@ class PhoneServer private constructor(private val context: Context, private val 
                     val known = when (f["key"]) {
                         "updatesEnabled" -> { onMain { AerialSettings.chooseUpdatesEnabled(on) }; true }
                         "showDailyShuffle" -> { onMain { AerialSettings.chooseShowDailyShuffle(on) }; true }
+                        "liveBackgroundPreview" -> { onMain { AerialSettings.chooseLiveBackgroundPreview(on) }; true }
                         "appPreviews" -> { onMain { AerialSettings.chooseAppPreviews(on) }; true }
                         "previewSound" -> { onMain { AerialSettings.choosePreviewSound(on) }; true }
                         "appPreview" -> {
@@ -231,6 +232,7 @@ class PhoneServer private constructor(private val context: Context, private val 
             .put("wallpaperAlwaysMoves", AerialSettings.wallpaperAlwaysMoves)
             .put("updatesEnabled", AerialSettings.updatesEnabled)
             .put("showDailyShuffle", AerialSettings.showDailyShuffle)
+            .put("liveBackgroundPreview", AerialSettings.liveBackgroundPreview)
             .put("appPreviews", AerialSettings.appPreviews)
             .put("previewSound", AerialSettings.previewSound)
             .put("previewDisabledApps", JSONArray(AerialSettings.previewDisabledApps.toList()))

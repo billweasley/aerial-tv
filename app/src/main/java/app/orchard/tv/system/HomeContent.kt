@@ -2,15 +2,23 @@ package app.orchard.tv.system
 
 import android.content.Context
 import android.content.Intent
+import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -24,15 +32,47 @@ import java.util.concurrent.atomic.AtomicBoolean
 object HomeContent {
     enum class Kind { Recommendation, Continue, Live }
     data class Item(val id: String, val title: String, val subtitle: String = "", val image: String? = null,
-        val intent: String? = null, val stream: String? = null, val kind: Kind = Kind.Recommendation)
+        val intent: String? = null, val stream: String? = null, val kind: Kind = Kind.Recommendation,
+        val engagedAt: Long = 0L)
     data class Profile(val feed: String = "", val snapshot: String = "")
     private const val PREFS = "home_content"
     const val MAX_ITEMS = 12
+    const val MAX_CHANNELS = 512
+    const val HOME_RECOMMENDATIONS = 3
     private const val MAX_BYTES = 2 * 1024 * 1024
     private val providerReader = Executors.newSingleThreadExecutor { job -> Thread(job, "AerialContent").apply { isDaemon = true } }
     private val providerBusy = AtomicBoolean(false)
     var revision by mutableIntStateOf(0); private set
     @Volatile var status: Map<String, String> = emptyMap(); private set
+
+    /** A returning launcher must not play a Watch Next record left over from before this visit. */
+    fun appOpened(context: Context, pkg: String) {
+        if (pkg == MytvContent.PACKAGE) context.getSharedPreferences("home_content_recent", 0).edit()
+            .putLong(pkg, System.currentTimeMillis()).apply()
+    }
+
+    /** Observe actual publisher changes; short retries also cover delayed writes on return. */
+    internal fun refreshes(context: Context, pkg: String) = callbackFlow {
+        val resolver = context.contentResolver
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { trySend(Unit) }
+        }
+        val registered = Build.VERSION.SDK_INT >= 26 && runCatching {
+            resolver.registerContentObserver(Uri.parse("content://android.media.tv"), true, observer)
+            true
+        }.getOrDefault(false)
+        val timer = launch {
+            send(Unit)
+            if (pkg == MytvContent.PACKAGE) repeat(8) { delay(1_000); send(Unit) }
+            while (true) { delay(60_000); send(Unit) }
+        }
+        awaitClose { timer.cancel(); if (registered) resolver.unregisterContentObserver(observer) }
+    }.conflate()
+
+    internal fun displayItems(items: List<Item>, recommendations: Boolean, liveBackground: Boolean): List<Item> {
+        if (liveBackground) items.firstOrNull { it.kind == Kind.Live }?.let { return listOf(it) }
+        return if (recommendations) items.filter { it.kind != Kind.Live }.take(HOME_RECOMMENDATIONS) else emptyList()
+    }
 
     fun profile(context: Context, pkg: String): Profile = runCatching {
         val obj = JSONObject(context.getSharedPreferences(PREFS, 0).getString(pkg, "{}") ?: "{}")
@@ -58,18 +98,25 @@ object HomeContent {
                 else if (config.snapshot.isNotBlank()) parse(config.snapshot)
                 else if (pkg == MytvContent.PACKAGE) MytvContent.load()
                 else boundedProvider(context.applicationContext, pkg)
-                items.filter { it.kind == Kind.Live || contentIntent(context, pkg, it.intent) != null }
+                val usable = items.filter { it.kind == Kind.Live || contentIntent(context, pkg, it.intent) != null }
+                if (pkg == MytvContent.PACKAGE && usable.any { it.kind == Kind.Live })
+                    MytvContent.followRecent(usable, recentItem(context, pkg),
+                        context.getSharedPreferences("home_content_recent", 0).getLong(pkg, 0L))
+                else usable
             }
         }.orEmpty()
         status = status + (pkg to if (loaded.isEmpty()) "no current content; using wallpaper" else "content available: ${loaded.size}")
         return loaded
     }
 
-    private fun boundedProvider(context: Context, pkg: String): List<Item> {
+    internal fun recentItem(context: Context, pkg: String): Item? =
+        boundedProvider(context.applicationContext, pkg, recentOnly = true).firstOrNull()
+
+    private fun boundedProvider(context: Context, pkg: String, recentOnly: Boolean = false): List<Item> {
         if (!providerBusy.compareAndSet(false, true)) return emptyList()
         val cancel = CancellationSignal()
         val task = FutureTask {
-            try { provider(context, pkg, cancel) } finally { providerBusy.set(false) }
+            try { provider(context, pkg, cancel, recentOnly) } finally { providerBusy.set(false) }
         }
         providerReader.execute(task)
         return try { task.get(2, TimeUnit.SECONDS) }
@@ -79,14 +126,17 @@ object HomeContent {
     }
 
     /** Android TV preview channels and Watch Next remain distinct, rather than relabeling history. */
-    private fun provider(context: Context, pkg: String, cancel: CancellationSignal): List<Item> {
+    private fun provider(context: Context, pkg: String, cancel: CancellationSignal, recentOnly: Boolean): List<Item> {
         if (Build.VERSION.SDK_INT < 26) return emptyList()
         val result = ArrayList<Item>()
-        for ((table, kind) in listOf("preview_program" to Kind.Recommendation, "watch_next_program" to Kind.Continue)) {
+        val tables = if (recentOnly) listOf("watch_next_program" to Kind.Continue)
+            else listOf("preview_program" to Kind.Recommendation, "watch_next_program" to Kind.Continue)
+        for ((table, kind) in tables) {
             runCatching {
-                context.contentResolver.query(Uri.parse("content://android.media.tv/$table"),
-                    arrayOf("_id", "package_name", "title", "short_description", "poster_art_uri", "intent_uri"),
-                    null, null, "_id DESC", cancel)?.use { c ->
+                val fields = arrayOf("_id", "package_name", "title", "short_description", "poster_art_uri", "intent_uri") +
+                    if (table == "watch_next_program") arrayOf("last_engagement_time_utc_millis") else emptyArray()
+                context.contentResolver.query(Uri.parse("content://android.media.tv/$table"), fields,
+                    null, null, if (table == "watch_next_program") "last_engagement_time_utc_millis DESC" else "_id DESC", cancel)?.use { c ->
                     fun field(name: String): String? = c.getColumnIndex(name).takeIf { it >= 0 }?.let { c.getString(it) }
                     var scanned = 0
                     while (result.size < MAX_ITEMS && scanned++ < 4096 && c.moveToNext()) {
@@ -96,7 +146,8 @@ object HomeContent {
                         val action = field("intent_uri")?.takeIf { it.isNotBlank() } ?: continue
                         if (contentIntent(context, pkg, action) == null) continue
                         result += Item("$table:${field("_id")}", title.take(180), field("short_description").orEmpty().take(360),
-                            field("poster_art_uri"), action, kind = kind)
+                            field("poster_art_uri"), action, kind = kind,
+                            engagedAt = field("last_engagement_time_utc_millis")?.toLongOrNull() ?: 0L)
                     }
                 }
             }
@@ -183,7 +234,7 @@ object HomeContent {
                     else -> {
                         val url = if (httpUrl(line)) line else line.substringAfter(',', "")
                         val label = if (httpUrl(line)) name else line.substringBefore(',')
-                        if (httpUrl(url) && label.isNotBlank() && result.size < MAX_ITEMS)
+                        if (httpUrl(url) && label.isNotBlank() && result.size < MAX_CHANNELS)
                             result += Item("live:${url.hashCode()}", label.take(180), image = logo, stream = url, kind = Kind.Live)
                         name = ""; logo = null
                     }

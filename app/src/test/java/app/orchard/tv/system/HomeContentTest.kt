@@ -13,6 +13,48 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class HomeContentTest {
+    @Test fun previewLayoutConflictRequiresBothPinnedInputsAndTwoRows() {
+        val settings = app.orchard.tv.settings.AerialSettings
+        assertFalse(settings.previewLayoutConflict(true, true))
+        assertFalse(settings.previewLayoutConflict(false, false))
+        assertFalse(settings.previewLayoutConflict(true, false))
+        assertTrue(settings.previewLayoutConflict(false, true))
+    }
+
+    @Test fun ignoresAChannelRecordThatPredatesTheLatestVisitToTheLiveApp() {
+        val channel = HomeContent.Item("live", "News", stream = "http://192.0.2.2/live.ts", kind = HomeContent.Kind.Live)
+        val recent = HomeContent.Item("recent", "News", kind = HomeContent.Kind.Continue, engagedAt = 1_000)
+        assertTrue(MytvContent.followRecent(listOf(channel), recent, openedAt = 2_000).isEmpty())
+        assertEquals(listOf(channel), MytvContent.followRecent(listOf(channel), recent.copy(engagedAt = 2_500), openedAt = 2_000))
+        assertTrue(MytvContent.followRecent(listOf(channel), recent.copy(engagedAt = 0), openedAt = 2_000).isEmpty())
+    }
+
+    @Test fun followsThePublishedLastChannelBeyondTheFirstTwelveAndNeverGuesses() {
+        val channels = HomeContent.parse((1..131).joinToString("\n") { "Channel $it,http://192.0.2.2/$it.ts" })
+        assertEquals(131, channels.size)
+        val recent = HomeContent.Item("recent", "Channel 100", kind = HomeContent.Kind.Continue)
+        assertEquals("Channel 100", MytvContent.followRecent(channels, recent).single().title)
+        assertTrue(MytvContent.followRecent(channels, null).isEmpty())
+        assertTrue(MytvContent.followRecent(channels, recent.copy(title = "Missing")).isEmpty())
+        assertTrue(MytvContent.followRecent(channels + channels[99].copy(id = "duplicate", stream = "http://192.0.2.2/other"), recent).isEmpty())
+    }
+
+    @Test fun homeRecommendationsAreLimitedToThreeAndLiveHasNoChannelPicker() {
+        val recs = (0..11).map { HomeContent.Item("r:$it", "Recommendation $it", intent = "https://example.com/$it") }
+        val channels = (0..11).map { HomeContent.Item("l:$it", "Channel $it", stream = "https://example.com/$it.ts", kind = HomeContent.Kind.Live) }
+        assertEquals(3, HomeContent.displayItems(recs, true, false).size)
+        assertEquals(1, HomeContent.displayItems(channels, true, true).size)
+        assertTrue(HomeContent.displayItems(channels, true, false).isEmpty())
+    }
+
+    @Test fun liveAndRecommendationsCanBeEnabledIndependently() {
+        val rec = HomeContent.Item("r", "An episode", intent = "https://example.com/watch")
+        val live = HomeContent.Item("l", "A channel", stream = "https://example.com/live.ts", kind = HomeContent.Kind.Live)
+        assertEquals(listOf(live), HomeContent.displayItems(listOf(rec, live), false, true))
+        assertEquals(listOf(rec), HomeContent.displayItems(listOf(rec, live), true, false))
+        assertTrue(HomeContent.displayItems(listOf(rec, live), false, false).isEmpty())
+    }
+
     @Test fun m3uKeepsRealTitlesLogosAndStreamsWithoutTreatingTheHeaderAsAChannel() {
         val items = HomeContent.parse("""
             #EXTM3U

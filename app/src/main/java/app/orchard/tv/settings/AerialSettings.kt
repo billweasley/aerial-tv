@@ -117,6 +117,8 @@ object AerialSettings {
     var updatesEnabled by mutableStateOf(false); private set
     var showDailyShuffle by mutableStateOf(true); private set
     var appPreviews by mutableStateOf(false); private set
+    var previewLayoutNotice by mutableStateOf(false); private set
+    var liveBackgroundPreview by mutableStateOf(false); private set
     var previewSound by mutableStateOf(false); private set
     var previewDisabledApps by mutableStateOf<Set<String>>(emptySet()); private set
 
@@ -216,6 +218,7 @@ object AerialSettings {
         updatesEnabled = prefs.getBoolean("updates_enabled", false)
         showDailyShuffle = prefs.getBoolean("show_daily_shuffle", true)
         appPreviews = prefs.getBoolean("app_previews", false)
+        liveBackgroundPreview = prefs.getBoolean("live_background_preview", appPreviews)
         previewSound = prefs.getBoolean("preview_sound", false)
         previewDisabledApps = prefs.getStringSet("preview_disabled_apps", emptySet())?.toSet() ?: emptySet()
         showAllNames = prefs.getBoolean("show_all_names", false)
@@ -233,6 +236,7 @@ object AerialSettings {
         aerialQuality = AerialQuality.of(prefs.getString("aerial_quality", null))
         effects = Effects.of(prefs.getString("effects", null))
         lowEnd = DeviceClass.lowEnd(app)
+        enforcePreviewLayout()
     }
 
     fun chooseBootSource(id: String?) {
@@ -288,6 +292,24 @@ object AerialSettings {
     fun chooseAppPreviews(on: Boolean) {
         appPreviews = on
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("app_previews", on) }
+        enforcePreviewLayout()
+    }
+
+    internal fun previewLayoutConflict(oneRow: Boolean, pinned: Boolean) = !oneRow && pinned
+
+    private fun enforcePreviewLayout() {
+        if (appPreviews && previewLayoutConflict(oneRowHome, pinnedSources.isNotEmpty())) {
+            appPreviews = false
+            app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("app_previews", false) }
+            previewLayoutNotice = true
+        }
+    }
+
+    fun clearPreviewLayoutNotice() { previewLayoutNotice = false }
+
+    fun chooseLiveBackgroundPreview(on: Boolean) {
+        liveBackgroundPreview = on
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("live_background_preview", on) }
     }
 
     fun choosePreviewSound(on: Boolean) {
@@ -303,6 +325,7 @@ object AerialSettings {
     fun chooseOneRowHome(on: Boolean) {
         oneRowHome = on
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("one_row_home", on) }
+        enforcePreviewLayout()
     }
 
     fun chooseHomeColumns(columns: Int) {
@@ -376,6 +399,7 @@ object AerialSettings {
         if (pinned && inputId !in pinnedSources && pinnedSources.size >= MAX_HOME_SOURCES) return false
         pinnedSources = if (pinned) pinnedSources + inputId else pinnedSources - inputId
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putStringSet("pinned_sources", pinnedSources) }
+        enforcePreviewLayout()
         return true
     }
 
