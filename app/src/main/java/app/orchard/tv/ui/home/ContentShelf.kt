@@ -170,6 +170,8 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
             }
         }
         player.addListener(listener)
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, !AerialSettings.previewSound).build()
         player.volume = if (AerialSettings.previewSound) 1f else 0f
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
@@ -184,6 +186,8 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
         }
     }
     LaunchedEffect(AerialSettings.previewSound) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, !AerialSettings.previewSound).build()
         player.setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, AerialSettings.previewSound)
         player.volume = if (AerialSettings.previewSound) 1f else 0f
     }

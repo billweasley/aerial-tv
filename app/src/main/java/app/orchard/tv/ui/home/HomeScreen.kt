@@ -339,6 +339,14 @@ fun HomeScreen(
     var contentItems by remember { mutableStateOf<List<HomeContent.Item>>(emptyList()) }
     var contentLoadedFor by remember { mutableStateOf<String?>(null) }
     var contentDismissedFor by remember { mutableStateOf<String?>(null) }
+    var previewFailures by remember { mutableIntStateOf(0) }
+    LaunchedEffect(contentDismissedFor) {
+        if (contentDismissedFor != null) {
+            delay(when (previewFailures) { 0 -> 3_000L; 1 -> 10_000L; else -> 30_000L })
+            previewFailures++
+            contentDismissedFor = null
+        }
+    }
     var contentFocused by remember { mutableStateOf(false) }
     var contentSelected by remember { mutableStateOf(0) }
     var readyStream by remember { mutableStateOf<String?>(null) }
@@ -351,6 +359,7 @@ fun HomeScreen(
                 // old channel synchronously instead of relying only on vm.resumed recomposition.
                 contentItems = emptyList(); contentLoadedFor = null; readyStream = null
                 contentDismissedFor = null
+                previewFailures = 0
                 contentSession++
             }
         }
@@ -370,7 +379,7 @@ fun HomeScreen(
     }
     val contentEnabled = (AerialSettings.appPreviews || AerialSettings.liveBackgroundPreview) && vm.resumed && !vm.screensaverVisible &&
         contentOwner != null && contentOwner !in AerialSettings.previewDisabledApps &&
-        contentOwner != contentDismissedFor && moving == null
+        moving == null
     LaunchedEffect(contentOwner, contentEnabled, contentSession, AerialSettings.appPreviews, AerialSettings.liveBackgroundPreview, HomeContent.revision) {
         contentItems = emptyList(); contentLoadedFor = null; readyStream = null; contentSelected = 0
         if (!contentEnabled) return@LaunchedEffect
@@ -382,6 +391,10 @@ fun HomeScreen(
                 emptyList()
             }
             val selectedId = contentItems.getOrNull(contentSelected)?.id
+            if (loaded.firstOrNull()?.stream != contentItems.firstOrNull()?.stream) {
+                contentDismissedFor = null
+                previewFailures = 0
+            }
             contentLoadedFor = owner
             contentItems = loaded
             contentSelected = loaded.indexOfFirst { it.id == selectedId }.takeIf { it >= 0 }
@@ -397,10 +410,10 @@ fun HomeScreen(
     }
     val contentCandidate = contentEnabled && contentLoadedFor == contentOwner && contentItems.isNotEmpty() &&
         overlay == Overlay.None && focusedRow == 0
-    val liveContent = contentCandidate && contentItems.getOrNull(contentSelected)?.kind == HomeContent.Kind.Live
+    val liveContent = contentCandidate && contentOwner != contentDismissedFor && contentItems.getOrNull(contentSelected)?.kind == HomeContent.Kind.Live
     val liveStream = contentItems.getOrNull(contentSelected)?.stream.takeIf { liveContent }
     val liveReady = liveStream != null && readyStream == liveStream
-    val showContent = contentCandidate && !liveContent
+    val showContent = contentCandidate && contentItems.getOrNull(contentSelected)?.kind != HomeContent.Kind.Live
     val showInputs = firstSourceId != null
     val shelfDownRequester = when {
         showContent -> contentRequester
@@ -779,7 +792,7 @@ fun HomeScreen(
             }
             sourceInput != null -> SourceWallpaper(sourceInput, show = vm.resumed && !vm.screensaverVisible && !liveContent, cover = filmCover)
         }
-        var liveDecoderReady by remember { mutableStateOf(false) }
+        var liveDecoderReady by remember(liveStream, contentSession) { mutableStateOf(false) }
         LaunchedEffect(liveStream, contentSession) {
             readyStream = null; liveDecoderReady = false
             if (liveContent) {
@@ -795,7 +808,7 @@ fun HomeScreen(
         if (liveContent && liveDecoderReady) liveStream?.let { stream ->
             key(stream, contentSession) {
                 LiveContentBackground(stream, liveReady,
-                    onReady = { readyStream = stream },
+                    onReady = { readyStream = stream; previewFailures = 0 },
                     onFailed = { contentDismissedFor = contentOwner; readyStream = null })
             }
         }

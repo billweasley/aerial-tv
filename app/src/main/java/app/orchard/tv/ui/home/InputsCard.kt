@@ -75,7 +75,7 @@ internal fun InputsCard(
     val shown = AerialSettings.orderedSourceIds(sources.map { it.id }).mapNotNull(byId::get)
         .filter { it.id in AerialSettings.pinnedSources }.take(AerialSettings.MAX_HOME_SOURCES)
     val allRequester = remember { FocusRequester() }
-    val markSize = (tileHeight * .3f).coerceIn(18.dp, 30.dp)
+    val markSize = (tileHeight - 55.dp).coerceIn(12.dp, 30.dp)
     fun requester(index: Int) = sourceRequester(shown[index])
 
     Column(modifier.padding(horizontal = PlatePadH, vertical = PlatePadV)) {
@@ -124,14 +124,14 @@ internal fun InputsCard(
                     }
                     Column(Modifier.fillMaxWidth().height(tileHeight)
                         .background(if (highlighted) Palette.Focus else Color.Transparent, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally) {
                         mark()
                         Spacer(Modifier.height(3.dp))
-                        BasicText(name ?: source.label, style = Type.Headline.copy(color = foreground, fontSize = 14.sp),
+                        BasicText(name ?: source.label, style = Type.Headline.copy(color = foreground, fontSize = 18.sp),
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        BasicText(subtitle, style = Type.Body.copy(color = foreground.copy(alpha = .65f), fontSize = 11.sp),
+                        BasicText(subtitle, style = Type.Body.copy(color = foreground.copy(alpha = .65f), fontSize = 13.sp),
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -157,7 +157,7 @@ internal fun InputsCard(
                 ) {
                     GlyphIcon(Glyph.ChevronRight, foreground, 18.dp)
                     Spacer(Modifier.height(4.dp))
-                    BasicText(stringResource(R.string.home_inputs_all), style = Type.Body.copy(color = foreground, fontSize = 12.sp), maxLines = 2)
+                    BasicText(stringResource(R.string.home_inputs_all), style = Type.Body.copy(color = foreground, fontSize = 14.sp), maxLines = 2)
                 }
             }
         }

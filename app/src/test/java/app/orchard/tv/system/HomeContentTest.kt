@@ -21,6 +21,16 @@ class HomeContentTest {
         assertTrue(settings.previewLayoutConflict(false, true))
     }
 
+    @Test fun aReturnWaitsForNewHistoryButDoesNotPermanentlyDisableTheLastChannelAfterExit() {
+        val channel = HomeContent.Item("live", "News", stream = "http://192.0.2.2/live.ts", kind = HomeContent.Kind.Live)
+        val oldRecord = HomeContent.Item("recent", "News", kind = HomeContent.Kind.Continue, engagedAt = 1_000L)
+        assertTrue(MytvContent.followRecent(listOf(channel), oldRecord,
+            HomeContent.recentGate(2_000L, 10_000L, 11_000L)).isEmpty())
+        assertEquals(listOf(channel), MytvContent.followRecent(listOf(channel), oldRecord,
+            HomeContent.recentGate(2_000L, 10_000L, 14_000L)))
+        assertEquals(0L, HomeContent.recentGate(2_000L, 10_000L, 9_000L))
+    }
+
     @Test fun ignoresAChannelRecordThatPredatesTheLatestVisitToTheLiveApp() {
         val channel = HomeContent.Item("live", "News", stream = "http://192.0.2.2/live.ts", kind = HomeContent.Kind.Live)
         val recent = HomeContent.Item("recent", "News", kind = HomeContent.Kind.Continue, engagedAt = 1_000)

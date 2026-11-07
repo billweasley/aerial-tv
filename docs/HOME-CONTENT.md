@@ -162,3 +162,13 @@ JavaScript/five-language table checks also pass. The TV was switched off by the 
 follow-up: version 107 has NOT been installed or tested on either TV. In particular, physical remote
 channel changes and absence of black frames still require real-TV validation. Live preview must stay
 off until the owner chooses to resume testing.
+
+## Recovery follow-up, 1.76-inputs.9
+
+See [boundary audit and follow-up](LIVE-PREVIEW-BOUNDARIES.md). Source typography is larger while
+retaining the app-card height. Last-channel freshness gating now expires four seconds after the
+first return read, so exiting the live app does not permanently reject its last published channel.
+Live metadata updates remain observed, with a two-second polling fallback. Playback failure falls
+back to normal wallpaper but keeps metadata loading alive and retries with 3/10/30-second backoff.
+Muted preview disables its own audio track. Sound from the separate background live app is still
+unattributed and is not claimed fixed. Xiaomi was unreachable during this pass; no TV was updated.

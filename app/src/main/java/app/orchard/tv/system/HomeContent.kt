@@ -48,7 +48,21 @@ object HomeContent {
     /** A returning launcher must not play a Watch Next record left over from before this visit. */
     fun appOpened(context: Context, pkg: String) {
         if (pkg == MytvContent.PACKAGE) context.getSharedPreferences("home_content_recent", 0).edit()
-            .putLong(pkg, System.currentTimeMillis()).apply()
+            .putLong(pkg, System.currentTimeMillis()).remove("$pkg:return_started").apply()
+    }
+
+    internal fun recentGate(openedAt: Long, returnStarted: Long, now: Long): Long =
+        if (returnStarted > 0 && now >= returnStarted && now - returnStarted < 4_000L) openedAt else 0L
+
+    private fun recentGate(context: Context, pkg: String): Long {
+        val prefs = context.getSharedPreferences("home_content_recent", 0)
+        val opened = prefs.getLong(pkg, 0L)
+        if (opened == 0L) return 0L
+        val now = System.currentTimeMillis()
+        val start = prefs.getLong("$pkg:return_started", 0L).takeIf { it > 0L } ?: now.also {
+            prefs.edit().putLong("$pkg:return_started", it).apply()
+        }
+        return recentGate(opened, start, now)
     }
 
     /** Observe actual publisher changes; short retries also cover delayed writes on return. */
@@ -64,7 +78,7 @@ object HomeContent {
         val timer = launch {
             send(Unit)
             if (pkg == MytvContent.PACKAGE) repeat(8) { delay(1_000); send(Unit) }
-            while (true) { delay(60_000); send(Unit) }
+            while (true) { delay(if (pkg == MytvContent.PACKAGE) 2_000L else 60_000L); send(Unit) }
         }
         awaitClose { timer.cancel(); if (registered) resolver.unregisterContentObserver(observer) }
     }.conflate()
@@ -101,7 +115,7 @@ object HomeContent {
                 val usable = items.filter { it.kind == Kind.Live || contentIntent(context, pkg, it.intent) != null }
                 if (pkg == MytvContent.PACKAGE && usable.any { it.kind == Kind.Live })
                     MytvContent.followRecent(usable, recentItem(context, pkg),
-                        context.getSharedPreferences("home_content_recent", 0).getLong(pkg, 0L))
+                        recentGate(context, pkg))
                 else usable
             }
         }.orEmpty()
