@@ -71,3 +71,58 @@ notes to 13sp, and All inputs to 14sp, with the existing card height retained.
 Both release flavors built successfully and all 194 standard unit tests passed. The new regression
 proves the initial freshness wait expires so last published history remains usable after exit.
 Signatures match the previous custom signer. No TV installation or real-TV validation in this pass.
+
+## Live observation, 2026-11-08
+
+The owner switched from Inner Mongolia Satellite TV to Hunan Satellite TV. A screenshot confirmed
+Hunan video in mytv's foreground player while three consecutive protected Watch Next probes still
+returned Inner Mongolia. A later probe returned Hunan, consistent with the owner's later desktop
+update. Thus this instance includes publisher delay; polling frequency alone cannot eliminate it.
+The source currently publishes one Watch Next record and no preview-program rows. There is no
+active mytv MediaSession in the captured system report. Its web API refused connections. Installed
+manifest inspection shows SPContentProvider, RecommendationBroadcastReceiver and the recommendation
+job service are not exported; another app cannot use them to request immediate current state.
+The exported voice service has no bound interface. No private provider or receiver is bypassed.
+
+Version 109 adds monotonic timing for observed record changes and preview preparation-to-visible
+first frame. The record age measures when Aerial first observed a changed record, not the unknown
+channel-switch time. Protected diagnostics include the publisher's engagement timestamp. Actual
+stream URLs and the full channel list are not added to diagnostics. Live preview startup buffering
+uses 300ms rather than Media3's default startup requirement; rebuffering retains 1000ms and the
+steady buffer range is 5–15s. This reduces the local playback part of latency; it does not claim
+to accelerate the source publisher or guarantee the current channel before it is published.
+
+## Installed-code inspection and read-only direct state, version 110
+
+The installed mytv is 3.0.0.235. Its current public repository says newer source is no longer
+published; older upstream source was read only as background. Installed bytecode was inspected
+locally to verify this exact build. No decompiled code, APK, settings, credentials, or signing keys
+are committed here.
+
+`DefaultChannelRecommendationJobService.onStartJob` deletes/reinserts Watch Next using the saved
+last-play channel. The scheduler calls `setPeriodic(900000L)`: a 15-minute job, not a per-channel
+notification. The internal channel-selection path stores `IPTV_CHANNEL_LAST_PLAY` immediately.
+`GET /api/configs` serializes that value as `iptvChannelLastPlay`, including `name` and `standardName`.
+Thus Watch Next delay is explained by actual publisher code, rather than a guessed polling interval.
+
+Aerial now tries that existing loopback GET once per content refresh, even with an imported playlist,
+and resolves its channel against the playlist. Direct state outranks Watch Next; a known direct
+channel that cannot be uniquely matched yields normal wallpaper instead of an older historical
+channel. If the web API or field is unavailable, the existing bounded Watch Next fallback remains.
+Full configs are used in memory only and are never saved to Aerial preferences or sent off-device.
+
+The web service starts when mytv MainActivity resumes and stops when that activity is destroyed.
+Therefore direct reads cannot be promised after ordinary exit or when that service is stopped.
+Aerial does not open mytv in the background or bypass its unexported providers/receivers. Reliable
+post-exit immediate synchronization may still require a publisher-side change. The TV became
+unreachable before the new direct endpoint path could be exercised; fixture tests do not constitute
+real-TV validation. Version 110 also includes the uninstalled version 109 startup-buffer and timing
+changes described above. No mytv software or TV settings were changed.
+
+Version 110: both release builds and 196 standard unit tests pass. Regression fixtures verify direct
+Hunan state outranks historical Inner Mongolia, unmatchable direct state does not play historical
+content, and missing API state uses the existing bounded fallback. The installed signer is retained.
+This build has not been installed or exercised against the TV web endpoint.
+
+Source availability: https://github.com/mytv-android/mytv-android (current README); older upstream
+https://github.com/yaoxieyoulei/mytv-android/tree/feature/ui was inspected as historical context only.

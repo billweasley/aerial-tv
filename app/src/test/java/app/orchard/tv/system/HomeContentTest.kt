@@ -13,6 +13,23 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class HomeContentTest {
+    @Test fun directPlayerChannelOutranksDelayedWatchNextWithoutReadingHistory() {
+        val channels = HomeContent.parse("Inner Mongolia,http://192.0.2.2/old.ts\nHunan,http://192.0.2.2/new.ts")
+        val state = JSONObject("""{"iptvChannelLastPlay":{"name":"Hunan","standardName":"Hunan"}}""")
+        val selected = MytvContent.resolveChannel(channels, state, { error("History must not override direct state") })
+        assertEquals("Hunan", selected.single().title)
+        state.getJSONObject("iptvChannelLastPlay").put("name", "Unavailable").put("standardName", "Unavailable")
+        assertTrue(MytvContent.resolveChannel(channels, state, { error("Do not play an old channel on match failure") }).isEmpty())
+    }
+
+    @Test fun absentDirectStateUsesPublishedHistoryAndDoesNotInventAChannel() {
+        val channels = HomeContent.parse("News,http://192.0.2.2/news.ts")
+        val history = HomeContent.Item("history", "News", kind = HomeContent.Kind.Continue)
+        assertEquals(channels, MytvContent.resolveChannel(channels, null, { history }))
+        assertTrue(MytvContent.resolveChannel(channels, JSONObject(), { null }).isEmpty())
+        assertNull(MytvContent.currentChannel(JSONObject("""{"iptvChannelLastPlay":{"name":null}}""")))
+    }
+
     @Test fun previewLayoutConflictRequiresBothPinnedInputsAndTwoRows() {
         val settings = app.orchard.tv.settings.AerialSettings
         assertFalse(settings.previewLayoutConflict(true, true))

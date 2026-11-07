@@ -44,6 +44,25 @@ object HomeContent {
     private val providerBusy = AtomicBoolean(false)
     var revision by mutableIntStateOf(0); private set
     @Volatile var status: Map<String, String> = emptyMap(); private set
+    @Volatile private var liveRecord: Item? = null
+    @Volatile private var liveRecordSeenAt = 0L
+    @Volatile private var previewPreparingAt = 0L
+    @Volatile private var previewFrameMs = -1L
+    @Volatile private var previewStream: String? = null
+
+    internal fun previewPreparing(stream: String) {
+        previewStream = stream
+        previewPreparingAt = android.os.SystemClock.elapsedRealtime()
+        previewFrameMs = -1L
+    }
+
+    internal fun previewRendered(stream: String) {
+        if (previewStream == stream) previewFrameMs = android.os.SystemClock.elapsedRealtime() - previewPreparingAt
+    }
+
+    fun liveTiming(): String = "record_age_ms=" +
+        (if (liveRecordSeenAt == 0L) -1L else android.os.SystemClock.elapsedRealtime() - liveRecordSeenAt) +
+        " first_frame_ms=$previewFrameMs"
 
     /** A returning launcher must not play a Watch Next record left over from before this visit. */
     fun appOpened(context: Context, pkg: String) {
@@ -108,14 +127,18 @@ object HomeContent {
         val loaded = withTimeoutOrNull(4_000) {
             runInterruptible(Dispatchers.IO) {
                 val config = profile(context, pkg)
+                val mytvState = if (pkg == MytvContent.PACKAGE) MytvContent.state() else null
                 val items = if (config.feed.isNotBlank()) parse(fetch(config.feed))
                 else if (config.snapshot.isNotBlank()) parse(config.snapshot)
-                else if (pkg == MytvContent.PACKAGE) MytvContent.load()
+                else if (pkg == MytvContent.PACKAGE) MytvContent.load(mytvState)
                 else boundedProvider(context.applicationContext, pkg)
                 val usable = items.filter { it.kind == Kind.Live || contentIntent(context, pkg, it.intent) != null }
-                if (pkg == MytvContent.PACKAGE && usable.any { it.kind == Kind.Live })
-                    MytvContent.followRecent(usable, recentItem(context, pkg),
-                        recentGate(context, pkg))
+                if (pkg == MytvContent.PACKAGE && usable.any { it.kind == Kind.Live }) {
+                    // A valid direct channel outranks delayed Watch Next. An unmatched direct
+                    // channel must fall back to wallpaper, never a different historical channel.
+                    MytvContent.resolveChannel(usable, mytvState,
+                        { recentItem(context, pkg) }, { recentGate(context, pkg) })
+                }
                 else usable
             }
         }.orEmpty()
@@ -124,7 +147,13 @@ object HomeContent {
     }
 
     internal fun recentItem(context: Context, pkg: String): Item? =
-        boundedProvider(context.applicationContext, pkg, recentOnly = true).firstOrNull()
+        boundedProvider(context.applicationContext, pkg, recentOnly = true).firstOrNull().also { item ->
+            if (pkg == MytvContent.PACKAGE && item != null && item != liveRecord) {
+                liveRecord = item
+                liveRecordSeenAt = android.os.SystemClock.elapsedRealtime()
+                DiagLog.i("live preview: changed Watch Next record observed")
+            }
+        }
 
     private fun boundedProvider(context: Context, pkg: String, recentOnly: Boolean = false): List<Item> {
         if (!providerBusy.compareAndSet(false, true)) return emptyList()

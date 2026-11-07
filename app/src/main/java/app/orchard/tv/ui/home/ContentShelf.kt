@@ -143,7 +143,10 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
     val failed by rememberUpdatedState(onFailed)
     var firstFrame by remember(url) { mutableStateOf(false) }
     var buffering by remember(url) { mutableStateOf(true) }
-    val player = remember(url) { ExoPlayer.Builder(context).build() }
+    val player = remember(url) {
+        ExoPlayer.Builder(context).setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(5_000, 15_000, 300, 1_000).build()).build()
+    }
     var texture by remember(player) { mutableStateOf<TextureView?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(player, lifecycle) {
@@ -170,6 +173,7 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
             }
         }
         player.addListener(listener)
+        HomeContent.previewPreparing(url)
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, !AerialSettings.previewSound).build()
         player.volume = if (AerialSettings.previewSound) 1f else 0f
@@ -182,6 +186,7 @@ private fun LiveContent(url: String, onReady: () -> Unit, onFailed: () -> Unit) 
         if (firstFrame) {
             // The render callback can precede TextureView composition. Reveal after it draws.
             withFrameNanos { }; withFrameNanos { }
+            HomeContent.previewRendered(url)
             ready()
         }
     }

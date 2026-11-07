@@ -8,8 +8,25 @@ internal object MytvContent {
     const val PACKAGE = "com.github.mytv.android"
     private const val BASE = "http://127.0.0.1:10591"
 
-    fun load(): List<HomeContent.Item> = runCatching {
-        val configs = JSONObject(HomeContent.fetch("$BASE/api/configs"))
+    fun state(): JSONObject? = runCatching { JSONObject(HomeContent.fetch("$BASE/api/configs")) }.getOrNull()
+
+    /** This installed version serializes IPTV_CHANNEL_LAST_PLAY directly in GET /api/configs. */
+    internal fun currentChannel(configs: JSONObject?): HomeContent.Item? {
+        val channel = configs?.optJSONObject("iptvChannelLastPlay") ?: return null
+        val name = channel.optString("name").takeIf { it.isNotBlank() && it != "null" } ?: return null
+        return HomeContent.Item("mytv:current", name, channel.optString("standardName").takeUnless { it == "null" }.orEmpty(),
+            kind = HomeContent.Kind.Continue)
+    }
+
+    internal fun resolveChannel(channels: List<HomeContent.Item>, configs: JSONObject?,
+        history: () -> HomeContent.Item?, openedAt: () -> Long = { 0L }): List<HomeContent.Item> {
+        val current = currentChannel(configs)
+        return if (current != null) followRecent(channels, current)
+        else followRecent(channels, history(), openedAt())
+    }
+
+    fun load(configs: JSONObject? = state()): List<HomeContent.Item> = runCatching {
+        if (configs == null) return emptyList()
         val source = selectedSource(configs) ?: return emptyList()
         val url = source.optString("url")
         when {

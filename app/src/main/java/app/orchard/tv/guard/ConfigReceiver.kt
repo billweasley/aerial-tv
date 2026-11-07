@@ -65,7 +65,8 @@ class ConfigReceiver : BroadcastReceiver() {
         intent.getStringExtra("recent_content")?.let { pkg ->
             val item = app.orchard.tv.system.HomeContent.recentItem(context, pkg)
             resultData = if (item == null) "{}" else org.json.JSONObject()
-                .put("title", item.title).put("subtitle", item.subtitle).put("intent", item.intent).toString()
+                .put("title", item.title).put("subtitle", item.subtitle).put("intent", item.intent)
+                .put("engagedAt", item.engagedAt).put("timing", app.orchard.tv.system.HomeContent.liveTiming()).toString()
             return
         }
         intent.getStringExtra("recommendation_package")?.let {
