@@ -52,7 +52,7 @@ class HomeContentProviderTest {
             val cursor = MatrixCursor(columns)
             fun row(id: String, owner: String, title: String, action: String) {
                 val data = mapOf("_id" to id, "package_name" to owner, "title" to title,
-                    "short_description" to "Published by the app", "poster_art_uri" to "https://image.example/poster.jpg", "intent_uri" to action, "last_engagement_time_utc_millis" to "2500")
+                    "short_description" to "Published by the app", "poster_art_uri" to "https://image.example/poster.jpg", "intent_uri" to action, "type" to "0", "poster_art_aspect_ratio" to "4", "last_engagement_time_utc_millis" to "2500")
                 cursor.addRow(columns.map { data[it] }.toTypedArray())
             }
             if (uri.lastPathSegment == "preview_program") {

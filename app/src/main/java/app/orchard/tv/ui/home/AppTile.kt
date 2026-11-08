@@ -110,7 +110,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 
 // D-pad remotes give no tilt to follow, so the lift itself has to read from across the room.
-private const val FOCUSED_SCALE = 1.15f
+internal const val FOCUSED_SCALE = 1.15f
 private const val PRESSED_SCALE = 1.05f
 
 /**

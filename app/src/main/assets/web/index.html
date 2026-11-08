@@ -1122,6 +1122,12 @@ TEXTS.en.push("Live TV background preview");
 TEXTS.ru.push("Прямой эфир на фоне");
 TEXTS.uk.push("Прямий ефір на тлі");
 TEXTS.kk.push("Фондағы тікелей эфир");
+KEYS.push("content_bilibili_public");
+TEXTS.zh.push("B站公开影视榜（每分钟检查更新）");
+TEXTS.en.push("Bilibili public film rankings (checked every minute)");
+TEXTS.ru.push("Открытый рейтинг фильмов Bilibili (проверка раз в минуту)");
+TEXTS.uk.push("Відкритий рейтинг фільмів Bilibili (перевірка щохвилини)");
+TEXTS.kk.push("Bilibili ашық фильм рейтингі (минут сайын тексеріледі)");
 const LANGS = Object.keys(TEXTS);
 const LANG = (() => {
   const asked = new URLSearchParams(location.search).get('lang');
@@ -1516,7 +1522,7 @@ function renderContentApps() {
       sw.disabled = false;
     };
     summary.appendChild(sw); box.appendChild(summary);
-    box.appendChild(el('p', 'foot', profile.hasSnapshot ? t('content_imported') : t('content_auto')));
+    box.appendChild(el('p', 'foot', profile.hasSnapshot ? t('content_imported') : (!profile.feed && app.key === 'com.xiaodianshi.tv.yst' ? t('content_bilibili_public') : t('content_auto'))));
     const form = el('form', 'item field');
     const input = el('input'); input.type = 'url'; input.placeholder = t('content_feed'); input.value = profile.feed || '';
     const save = el('button', 'link', t('save')); save.type = 'submit';

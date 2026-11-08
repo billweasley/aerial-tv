@@ -13,6 +13,25 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class HomeContentTest {
+    @Test fun artworkPolicyRejectsGamesAndClipsButKeepsMoviesAndAlbums() {
+        val artwork = HomeContent.Item("poster", "Movie", image = "https://example.com/art.jpg", mediaType = 0)
+        assertFalse(HomeContent.eligibleArtwork("com.limelight", artwork))
+        assertFalse(HomeContent.eligibleArtwork("example.video", artwork.copy(mediaType = 4)))
+        assertFalse(HomeContent.eligibleArtwork("example.video", artwork.copy(mediaType = null)))
+        assertTrue(HomeContent.eligibleArtwork("example.video", artwork))
+        assertTrue(HomeContent.eligibleArtwork("example.music", artwork.copy(mediaType = 8)))
+        assertFalse(HomeContent.eligibleArtwork("com.xiaodianshi.tv.yst", artwork.copy(artworkAspect = 0)))
+        assertTrue(HomeContent.eligibleArtwork("com.xiaodianshi.tv.yst", artwork.copy(artworkAspect = 4)))
+        assertFalse(HomeContent.eligibleArtwork("com.xiaodianshi.tv.yst", artwork.copy(mediaType = 1, artworkAspect = 0)))
+        assertTrue(HomeContent.eligibleArtwork("com.xiaodianshi.tv.yst", artwork.copy(mediaType = 1, artworkAspect = 4)))
+    }
+
+    @Test fun explicitBackgroundFeedsCanProvideCuratedArtworkWithoutInventingContentTypes() {
+        val item = HomeContent.parse("""[{"title":"A selection","intent":"https://example.com/watch","backgroundImage":"https://example.com/background.jpg"}]""").single()
+        assertTrue(HomeContent.eligibleArtwork("example.video", item))
+        assertFalse(HomeContent.eligibleArtwork("com.limelight", item))
+    }
+
     @Test fun directPlayerChannelOutranksDelayedWatchNextWithoutReadingHistory() {
         val channels = HomeContent.parse("Inner Mongolia,http://192.0.2.2/old.ts\nHunan,http://192.0.2.2/new.ts")
         val state = JSONObject("""{"iptvChannelLastPlay":{"name":"Hunan","standardName":"Hunan"}}""")

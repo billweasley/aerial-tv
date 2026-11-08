@@ -197,3 +197,47 @@ fallback for unsupported image locations. Both release flavors build, 199 standa
 and phone JavaScript plus all five translation tables pass checks. The owner is away from the TV:
 this revision has NOT been installed or visually/remote-tested on the real TV. No TV settings or
 third-party apps were changed for this revision.
+
+## Source layout and Bilibili artwork revision, 1.76-inputs.16
+
+Latest owner feedback supersedes the intermediate equal-column source layout: three source
+positions again spread across the source shelf with its original 6dp gaps. Their inner highlight
+uses 1.08 times the app-tile rest width, with the same focus scale as apps. Device icon and HDMI
+port share a header row inside the highlight; the device name is single-line with a bounded
+14–18sp fit, and optional notes stay inside too. Nintendo Switch retains its full name. All Inputs
+uses a single-line fitted label. Source hover, including All Inputs, restores the selected normal
+wallpaper instead of retaining the prior app poster or live preview.
+
+Moonlight and Steam Link are excluded from recommendation artwork. Generic provider artwork must
+have a supported film/series/music type; clips, games, and unknown types do not become full-screen
+backgrounds. Ambiguous Bilibili provider art requires portrait-poster metadata rather than a generic
+video thumbnail. Owner-configured feeds may explicitly provide `backgroundImage` or a supported
+`mediaType` (`movie`, `series`, `season`, `episode`, `track`, `album`, `artist`, `playlist`). A game
+streaming app remains excluded even with a configured feed.
+
+With no custom Bilibili feed/snapshot, Aerial reads the public three-day film ranking first, then
+the anime ranking if unavailable. It takes the first three real cover images in publisher order,
+validates the official image CDN and response status, and bakes a gently angled poster wall with
+uniform shading. This is public ranking data, not the owner account’s personalized recommendations.
+A one-minute cache and the existing minute refresh check for changed ranking data; a new picture
+is not guaranteed each minute. No cookies, credentials, account calls, or new SDK are used. Failed
+public-source reads fall back to eligible app-published artwork, then normal wallpaper. Explicit
+owner content configurations retain priority. The phone settings page identifies the Bilibili
+public-ranking source in all five languages.
+
+Read-only official endpoints verified from the computer during this pass:
+
+- https://api.bilibili.com/pgc/season/rank/web/list?day=3&season_type=2
+- https://api.bilibili.com/pgc/web/rank/list?day=3&season_type=1
+
+The source classifier follows the documented Android TV program types and poster ratios:
+https://developer.android.com/reference/androidx/tvprovider/media/tv/TvContractCompat.PreviewProgramColumns
+
+Both release flavors and 203 unit tests pass; phone JavaScript and all five translation tables pass.
+Version 116 was installed in place on Xiaomi and compiled with speed. A captured frame confirmed
+full single-line Nintendo Switch and All Inputs labels, three spread source positions, and the
+normal wallpaper while All Inputs was focused. The attempted Bilibili visual sequence did not
+produce a valid Bilibili frame: the selected control was All Inputs and the TV subsequently entered
+its HDMI player. Do not claim the Bilibili wall was visually verified. No source input was force-
+stopped and the owner was asked whether HDMI was in use before further UI navigation. The scrcpy
+preview window was restored after a bounded private validation capture. Raw captures stay local.

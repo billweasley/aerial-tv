@@ -2,6 +2,7 @@ package app.orchard.tv.ui.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -59,6 +61,7 @@ import app.orchard.tv.ui.theme.Type
 internal fun InputsCard(
     sources: List<TvSource>,
     tileHeight: Dp,
+    tileWidth: Dp,
     enabled: Boolean,
     focusRequester: FocusRequester,
     upRequester: FocusRequester,
@@ -75,7 +78,8 @@ internal fun InputsCard(
     val shown = AerialSettings.orderedSourceIds(sources.map { it.id }).mapNotNull(byId::get)
         .filter { it.id in AerialSettings.pinnedSources }.take(AerialSettings.MAX_HOME_SOURCES)
     val allRequester = remember { FocusRequester() }
-    val markSize = (tileHeight - 55.dp).coerceIn(12.dp, 30.dp)
+    val markSize = if (tileHeight < 76.dp) 24.dp else 28.dp
+    val nameSize = if (tileHeight < 76.dp) 16.sp else 18.sp
     fun requester(index: Int) = sourceRequester(shown[index])
 
     Column(modifier.padding(horizontal = PlatePadH, vertical = PlatePadV)) {
@@ -86,7 +90,7 @@ internal fun InputsCard(
                 Pressable(
                     onClick = { onOpenSource(source) }, enabled = enabled,
                     onLongPress = { if (movingKey == null) onLongPress(source, bounds) },
-                    focusRequester = requester(index), focusedScale = 1.04f,
+                    focusRequester = requester(index), focusedScale = FOCUSED_SCALE,
                     modifier = Modifier.weight(1f).onGloballyPositioned { bounds = it.boundsInWindow() }.focusProperties {
                         up = upRequester
                         downRequester?.let { down = it }
@@ -109,9 +113,8 @@ internal fun InputsCard(
                         name?.contains("xbox", true) == true -> SourceDevice.Xbox
                         else -> null
                     }
-                    val subtitle = listOfNotNull(note, source.label.takeIf { name != null }).joinToString(" · ").ifBlank {
-                        stringResource(if (source.connected) R.string.input_connected else R.string.home_inputs_available)
-                    }
+                    val port = source.label.takeIf { name != null } ?: stringResource(
+                        if (source.connected) R.string.input_connected else R.string.home_inputs_available)
                     val mark: @androidx.compose.runtime.Composable () -> Unit = {
                         if (device != null) DeviceMark(device, foreground, markSize)
                         else if (source.kind == SourceKind.Hdmi || source.kind == SourceKind.DisplayPort) MonitorMark(foreground, markSize)
@@ -122,24 +125,34 @@ internal fun InputsCard(
                             else -> Glyph.Hdmi
                         }, foreground, markSize)
                     }
-                    Column(Modifier.fillMaxWidth().height(tileHeight)
-                        .background(if (highlighted) Palette.Focus else Color.Transparent, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally) {
-                        mark()
-                        Spacer(Modifier.height(3.dp))
-                        BasicText(name ?: source.label, style = Type.Headline.copy(color = foreground, fontSize = 18.sp),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        BasicText(subtitle, style = Type.Body.copy(color = foreground.copy(alpha = .65f), fontSize = 13.sp),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(Modifier.width(tileWidth * 1.08f).height(tileHeight)
+                            .background(if (highlighted) Palette.Focus else Color.Transparent, RoundedCornerShape(14.dp))
+                            .padding(horizontal = 7.dp, vertical = 3.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                mark()
+                                BasicText(port, style = Type.Body.copy(color = foreground.copy(alpha = .72f), fontSize = 13.sp),
+                                    maxLines = 1, autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 13.sp, stepSize = 1.sp))
+                            }
+                            Spacer(Modifier.height(3.dp))
+                            BasicText(name ?: source.label, style = Type.Headline.copy(color = foreground, fontSize = nameSize,
+                                lineHeight = if (tileHeight < 76.dp) 18.sp else 20.sp),
+                                maxLines = 1,
+                                autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = nameSize, stepSize = .5.sp))
+                            if (!note.isNullOrBlank()) BasicText(note,
+                                style = Type.Body.copy(color = foreground.copy(alpha = .75f), fontSize = 12.sp), maxLines = 1,
+                                autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 12.sp, stepSize = 1.sp))
+                        }
                     }
                 }
               }
             }
             Pressable(
                 onClick = onClick, enabled = enabled,
-                focusRequester = if (shown.isEmpty()) focusRequester else allRequester, focusedScale = 1.04f,
+                focusRequester = if (shown.isEmpty()) focusRequester else allRequester, focusedScale = FOCUSED_SCALE,
                 modifier = Modifier.width(96.dp).focusProperties {
                     up = upRequester
                     downRequester?.let { down = it }
@@ -149,15 +162,16 @@ internal fun InputsCard(
             ) { state ->
                 LaunchedEffect(state.focused) { onFocused(state.focused) }
                 val foreground = if (state.focused) Palette.OnFocus else Color.White
-                Column(
-                    Modifier.fillMaxWidth().height(tileHeight)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.fillMaxWidth().height(tileHeight)
                         .background(if (state.focused) Palette.Focus else Color.Transparent, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    GlyphIcon(Glyph.ChevronRight, foreground, 18.dp)
-                    Spacer(Modifier.height(4.dp))
-                    BasicText(stringResource(R.string.home_inputs_all), style = Type.Body.copy(color = foreground, fontSize = 14.sp), maxLines = 2)
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        GlyphIcon(Glyph.ChevronRight, foreground, 32.dp)
+                        Spacer(Modifier.height(5.dp))
+                        BasicText(stringResource(R.string.home_inputs_all), style = Type.Body.copy(color = foreground, fontSize = 18.sp), maxLines = 1,
+                            autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = 18.sp, stepSize = 1.sp))
+                    }
                 }
             }
         }

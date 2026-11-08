@@ -391,22 +391,24 @@ fun HomeScreen(
     }
     val contentCandidate = contentEnabled && contentLoadedFor == contentOwner && contentItems.isNotEmpty() &&
         overlay == Overlay.None && focusedRow == 0
-    val liveContent = contentCandidate && contentOwner != contentDismissedFor && contentItems.firstOrNull()?.kind == HomeContent.Kind.Live
+    val liveContent = contentCandidate && !inputsFocused && contentOwner != contentDismissedFor && contentItems.firstOrNull()?.kind == HomeContent.Kind.Live
     val liveStream = contentItems.firstOrNull()?.stream.takeIf { liveContent }
     val liveReady = liveStream != null && readyStream == liveStream
     val heroEntry = contentItems.firstOrNull()?.takeIf {
-        contentEnabled && contentLoadedFor == contentOwner && focusedRow < (if (AerialSettings.oneRowHome) 1 else 2) && it.kind != HomeContent.Kind.Live
+        contentEnabled && !inputsFocused && contentLoadedFor == contentOwner && focusedRow < (if (AerialSettings.oneRowHome) 1 else 2) && it.kind != HomeContent.Kind.Live
     }
-    val loadedArtwork by produceState<Pair<String, RecommendationArtwork>?>(null, heroEntry?.image) {
+    val heroUris = if (heroEntry == null) emptyList() else if (contentOwner == app.orchard.tv.system.BilibiliContent.PACKAGE)
+        contentItems.mapNotNull { it.image }.distinct().take(3) else listOfNotNull(heroEntry.image)
+    val loadedArtwork by produceState<Pair<List<String>, RecommendationArtwork>?>(null, heroUris) {
         value = null
-        val uri = heroEntry?.image?.takeIf { it.isNotBlank() } ?: return@produceState
+        if (heroUris.isEmpty()) return@produceState
         val artwork = kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) {
-            loadRecommendationArtwork(appContext, uri)
+            loadRecommendationWall(appContext, heroUris)
         }
-        value = artwork?.let { uri to it }
+        value = artwork?.let { heroUris to it }
     }
     // A previous asynchronous load must never flash another app's picture on focus change.
-    val heroArtwork = loadedArtwork?.takeIf { it.first == heroEntry?.image }?.second
+    val heroArtwork = loadedArtwork?.takeIf { it.first == heroUris && heroEntry != null }?.second
     val externalBackground = liveContent || heroArtwork != null
     val showInputs = firstSourceId != null
     val shelfDownRequester = when {
@@ -932,6 +934,7 @@ fun HomeScreen(
                 // Use the empty area above the apps; keep a large clock on its own side.
                 if (showInputs) InputsCard(
                     sources = vm.sources,
+                    tileWidth = metrics.tileW,
                     tileHeight = metrics.tileH,
                     enabled = gridEnabled && (moving == null || moving.startsWith(SOURCE_KEY_PREFIX)) && !inGrid && !vm.screensaverVisible,
                     focusRequester = inputsRequester,

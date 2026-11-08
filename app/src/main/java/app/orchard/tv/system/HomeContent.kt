@@ -33,12 +33,25 @@ object HomeContent {
     enum class Kind { Recommendation, Continue, Live }
     data class Item(val id: String, val title: String, val subtitle: String = "", val image: String? = null,
         val intent: String? = null, val stream: String? = null, val kind: Kind = Kind.Recommendation,
-        val engagedAt: Long = 0L)
+        val engagedAt: Long = 0L, val mediaType: Int? = null, val artworkAspect: Int? = null,
+        val curatedBackground: Boolean = false)
     data class Profile(val feed: String = "", val snapshot: String = "")
     private const val PREFS = "home_content"
     const val MAX_ITEMS = 12
     const val MAX_CHANNELS = 512
     const val HOME_RECOMMENDATIONS = 3
+
+    /** Provider artwork is useful only when its content type actually describes media artwork. */
+    internal fun eligibleArtwork(pkg: String, item: Item): Boolean {
+        if (pkg == "com.limelight" || pkg.startsWith("com.limelight.") || pkg == "com.valvesoftware.steamlink") return false
+        if (item.kind == Kind.Live || item.image.isNullOrBlank()) return false
+        if (item.curatedBackground) return true
+        if (item.mediaType !in setOf(0, 1, 2, 3, 7, 8, 9, 10)) return false
+        // Bilibili program rows can be video thumbnails even when labeled as films/series.
+        // Only a declared portrait poster, or an explicit curated background, qualifies.
+        if (pkg == "com.xiaodianshi.tv.yst" && item.artworkAspect !in setOf(4, 5, 6)) return false
+        return true
+    }
     private const val MAX_BYTES = 2 * 1024 * 1024
     private val providerReader = Executors.newSingleThreadExecutor { job -> Thread(job, "AerialContent").apply { isDaemon = true } }
     private val providerBusy = AtomicBoolean(false)
@@ -131,8 +144,10 @@ object HomeContent {
                 val items = if (config.feed.isNotBlank()) parse(fetch(config.feed))
                 else if (config.snapshot.isNotBlank()) parse(config.snapshot)
                 else if (pkg == MytvContent.PACKAGE) MytvContent.load(mytvState)
+                else if (pkg == BilibiliContent.PACKAGE) BilibiliContent.load(context).ifEmpty { boundedProvider(context.applicationContext, pkg) }
                 else boundedProvider(context.applicationContext, pkg)
-                val usable = items.filter { it.kind == Kind.Live || contentIntent(context, pkg, it.intent) != null }
+                val usable = items.filter { it.kind == Kind.Live ||
+                    eligibleArtwork(pkg, it) && contentIntent(context, pkg, it.intent) != null }
                 if (pkg == MytvContent.PACKAGE && usable.any { it.kind == Kind.Live }) {
                     // A valid direct channel outranks delayed Watch Next. An unmatched direct
                     // channel must fall back to wallpaper, never a different historical channel.
@@ -176,7 +191,7 @@ object HomeContent {
             else listOf("preview_program" to Kind.Recommendation, "watch_next_program" to Kind.Continue)
         for ((table, kind) in tables) {
             runCatching {
-                val fields = arrayOf("_id", "package_name", "title", "short_description", "poster_art_uri", "intent_uri") +
+                val fields = arrayOf("_id", "package_name", "title", "short_description", "poster_art_uri", "intent_uri", "type", "poster_art_aspect_ratio") +
                     if (table == "watch_next_program") arrayOf("last_engagement_time_utc_millis") else emptyArray()
                 context.contentResolver.query(Uri.parse("content://android.media.tv/$table"), fields,
                     null, null, if (table == "watch_next_program") "last_engagement_time_utc_millis DESC" else "_id DESC", cancel)?.use { c ->
@@ -188,9 +203,11 @@ object HomeContent {
                         val title = field("title")?.takeIf { it.isNotBlank() } ?: continue
                         val action = field("intent_uri")?.takeIf { it.isNotBlank() } ?: continue
                         if (contentIntent(context, pkg, action) == null) continue
-                        result += Item("$table:${field("_id")}", title.take(180), field("short_description").orEmpty().take(360),
+                        val item = Item("$table:${field("_id")}", title.take(180), field("short_description").orEmpty().take(360),
                             field("poster_art_uri"), action, kind = kind,
-                            engagedAt = field("last_engagement_time_utc_millis")?.toLongOrNull() ?: 0L)
+                            engagedAt = field("last_engagement_time_utc_millis")?.toLongOrNull() ?: 0L,
+                            mediaType = field("type")?.toIntOrNull(), artworkAspect = field("poster_art_aspect_ratio")?.toIntOrNull())
+                        if (recentOnly || pkg == MytvContent.PACKAGE || eligibleArtwork(pkg, item)) result += item
                     }
                 }
             }
@@ -219,12 +236,13 @@ object HomeContent {
         u.protocol in setOf("http", "https") && u.host.isNotBlank()
     }.getOrDefault(false)
 
-    internal fun fetch(url: String): String {
+    internal fun fetch(url: String, headers: Map<String, String> = emptyMap()): String {
         require(httpUrl(url))
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 1500
         c.readTimeout = 1500
         c.instanceFollowRedirects = false
+        headers.forEach { (key, value) -> c.setRequestProperty(key, value) }
         try {
             require(c.responseCode in 200..299)
             val bytes = c.inputStream.use { it.readBytesBounded(MAX_BYTES) }
@@ -257,10 +275,17 @@ object HomeContent {
                 val live = o.optBoolean("live", false)
                 val stream = o.optString("stream").takeIf(::httpUrl)
                 val action = o.optString("intent").takeIf { it.isNotBlank() }
+                val backdrop = o.optString("backgroundImage").takeIf(::httpUrl)
+                val mediaType = when (o.optString("mediaType")) {
+                    "movie" -> 0; "series" -> 1; "season" -> 2; "episode" -> 3
+                    "track" -> 7; "album" -> 8; "artist" -> 9; "playlist" -> 10
+                    else -> null
+                }
                 if (if (live) stream == null else action == null) return@mapNotNull null
                 Item(o.optString("id", "item:$i"), title, o.optString("subtitle").take(360),
-                    o.optString("image").takeIf { it.isNotBlank() }, action, stream,
-                    if (live) Kind.Live else Kind.Recommendation)
+                    backdrop ?: o.optString("image").takeIf { it.isNotBlank() }, action, stream,
+                    if (live) Kind.Live else Kind.Recommendation, mediaType = mediaType,
+                    curatedBackground = backdrop != null)
             }.distinctBy { listOf(it.title, it.intent, it.stream) }.take(MAX_ITEMS).toList()
         } else {
             val result = ArrayList<Item>()
