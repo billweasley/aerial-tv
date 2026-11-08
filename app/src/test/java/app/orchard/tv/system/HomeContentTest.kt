@@ -30,12 +30,15 @@ class HomeContentTest {
         assertNull(MytvContent.currentChannel(JSONObject("""{"iptvChannelLastPlay":{"name":null}}""")))
     }
 
-    @Test fun previewLayoutConflictRequiresBothPinnedInputsAndTwoRows() {
+    @Test fun recommendationBackgroundRemainsEnabledWithPinnedInputsAndTwoRows() {
+        val context = RuntimeEnvironment.getApplication()
         val settings = app.orchard.tv.settings.AerialSettings
-        assertFalse(settings.previewLayoutConflict(true, true))
-        assertFalse(settings.previewLayoutConflict(false, false))
-        assertFalse(settings.previewLayoutConflict(true, false))
-        assertTrue(settings.previewLayoutConflict(false, true))
+        settings.init(context)
+        settings.chooseAppPreviews(true)
+        settings.chooseOneRowHome(false)
+        settings.setPinned("test:hdmi", true)
+        assertTrue(settings.appPreviews)
+        assertTrue(context.getSharedPreferences("settings", 0).getBoolean("app_previews", false))
     }
 
     @Test fun aReturnWaitsForNewHistoryButDoesNotPermanentlyDisableTheLastChannelAfterExit() {

@@ -258,7 +258,7 @@
     <string name="st_daily_shuffle">Күнделікті сурет түймесі</string>
     <string name="st_daily_shuffle_hint">Суретті ауыстыру түймесі тек күнделікті суреттерде көрсетіледі.</string>
     <string name="st_app_previews">Бейне және музыка ұсыныстары</string>
-    <string name="st_app_previews_hint">Қолданба таңдалғанда минут сайын жаңаратын үш ұсынысқа дейін.</string>
+    <string name="st_app_previews_hint">Таңдалған қолданба ұсынысының постері фонға қойылады. Минут сайын жаңарады; постер болмаса, қалыпты тұсқағаз сақталады.</string>
     <string name="st_preview_sound">Алдын ала қарау дыбысы</string>
     <string name="st_preview_sound_hint">Бұл опция қосылмаса, тікелей эфир дыбыссыз болады.</string>
     <string name="content_sources">Кірістер</string>
@@ -267,5 +267,4 @@
     <string name="content_live">Тікелей эфир</string>
     <string name="st_live_background">Фондағы тікелей эфир</string>
     <string name="st_live_background_hint">Қолданбаның соңғы арнасын толық экранда көрсету. Арна қолжетімсіз болса, қалыпты тұсқағаз қайтарылады.</string>
-    <string name="st_previews_disabled_layout">Кірістер бекітіліп, қолданбалардың екі қатары қосылғандықтан, бейне мен музыка ұсыныстары өшірілді.</string>
 </resources>

@@ -258,7 +258,7 @@
     <string name="st_daily_shuffle">Кнопка ежедневных обоев</string>
     <string name="st_daily_shuffle_hint">Показывать смену обоев только для ежедневных изображений.</string>
     <string name="st_app_previews">Рекомендации видео и музыки</string>
-    <string name="st_app_previews_hint">До трёх карточек с обновлением каждую минуту, пока приложение выбрано.</string>
+    <string name="st_app_previews_hint">Обложки рекомендаций на фоне выбранного приложения. Обновление каждую минуту; без обложки остаются обычные обои.</string>
     <string name="st_preview_sound">Звук предпросмотра</string>
     <string name="st_preview_sound_hint">Прямой эфир без звука, пока эта настройка выключена.</string>
     <string name="content_sources">Входы</string>
@@ -267,5 +267,4 @@
     <string name="content_live">Прямой эфир</string>
     <string name="st_live_background">Прямой эфир на фоне</string>
     <string name="st_live_background_hint">Последний канал приложения на весь экран. Если канал недоступен, остаются обычные обои.</string>
-    <string name="st_previews_disabled_layout">Рекомендации видео и музыки отключены: закреплены входы и включены два ряда приложений.</string>
 </resources>

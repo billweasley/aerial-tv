@@ -258,7 +258,7 @@
     <string name="st_daily_shuffle">Кнопка щоденних шпалер</string>
     <string name="st_daily_shuffle_hint">Показувати зміну шпалер лише для щоденних зображень.</string>
     <string name="st_app_previews">Рекомендації відео та музики</string>
-    <string name="st_app_previews_hint">До трьох карток з оновленням щохвилини, поки застосунок вибрано.</string>
+    <string name="st_app_previews_hint">Обкладинки рекомендацій на тлі вибраного застосунку. Оновлення щохвилини; без обкладинки залишаються звичайні шпалери.</string>
     <string name="st_preview_sound">Звук попереднього перегляду</string>
     <string name="st_preview_sound_hint">Прямий ефір без звуку, доки цю опцію вимкнено.</string>
     <string name="content_sources">Входи</string>
@@ -267,5 +267,4 @@
     <string name="content_live">Прямий ефір</string>
     <string name="st_live_background">Прямий ефір на тлі</string>
     <string name="st_live_background_hint">Останній канал застосунку на весь екран. Якщо канал недоступний, залишаються звичайні шпалери.</string>
-    <string name="st_previews_disabled_layout">Рекомендації відео та музики вимкнено: закріплено входи та ввімкнено два ряди застосунків.</string>
 </resources>

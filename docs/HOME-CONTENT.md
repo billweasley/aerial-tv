@@ -1,6 +1,6 @@
 # Optional Home content
 
-Custom build `1.76-inputs.8` (versionCode 107) adds three persistent options in Personalize:
+Custom build `1.76-inputs.12` (versionCode 111) adds three persistent options in Personalize:
 
 - Disable updates: on by default for this custom build. Stops version checks, retry timers,
   update notices and new downloads/install requests. Turning it off enables the upstream
@@ -8,20 +8,33 @@ Custom build `1.76-inputs.8` (versionCode 107) adds three persistent options in 
 - Daily picture button: shown in Personalize only with a daily wallpaper selected. Its Home
   button also requires a daily selection, the option enabled, and another cached daily image.
   It cannot change a photo, built-in image, aerial film or HDMI wallpaper into a daily image.
-- Video and music recommendations: off by default, at most three cards.
+- Video and music recommendations: off by default; the latest selected-app recommendation supplies a static artwork background.
 - Live TV background preview: an independent toggle, muted by default. Per-app switches and
   content sources are on the authenticated phone settings page.
-- Pinned inputs together with two app rows automatically turn recommendations off and display
-  a notice. Neither condition alone does this. Live background preview remains independent.
+- Two app rows and pinned inputs can coexist with recommendation backgrounds. Layout changes
+  do not disable recommendations; the explicit on/off preference is retained.
 
 ## Content, rather than placeholder cards
 
-Apps on Home's first row can supply a Top Shelf above the pinned input shelf. Focus settles for
-450 ms before loading. Recommendations are limited to three equal-width cards; a lone card keeps
-the same width. Inputs remain available below. Up enters the sources, then the recommendation cards;
-Down and Back return toward the apps. Video and music recommendations are refreshed every minute
-while the relevant app is selected and Aerial is resumed, and on focus/return. Playback and refresh
-stop while another app opens or the screensaver starts.
+Selecting an app on the visible app shelf loads its available recommendation artwork after a
+450ms focus debounce. Recommendations are a pure wallpaper treatment: there is no poster-card row,
+added title, description, recommendation focus target or dedicated action. Existing app, input,
+clock and control-center navigation stays in place. App selection still opens the app normally.
+Both visible rows can drive the background when two-row layout is enabled, with pinned inputs
+retained. The source shelf and app cards keep their aligned layout.
+
+Video/music metadata refreshes every minute while the app remains selected and Aerial is resumed.
+A fresh top recommendation can replace the background. A missing/failed image retains normal
+wallpaper; no app icon is stretched into a pretend movie poster. A prior asynchronous load cannot
+flash an unrelated image after selection changes. Real published artwork is used; no fictional
+recommendations or external catalog are introduced.
+
+Wide artwork fills the background with aspect-preserving crop. Portrait film covers and square
+album artwork remain whole on the right. Gradients are baked into one static 1280×720 picture and
+a matching frosted picture is prepared off the main thread. The underlying wallpaper decoder is
+released while recommendation artwork is displayed, with the existing wallpaper handoff behavior
+on return. Menus retain the selected artwork in the background. No recommendation video or audio
+is started. The same preference is described on TV and phone in all five supported languages.
 
 The default recommendation source is Android TV's `preview_program` provider. `watch_next_program`
 is read separately and labeled Continue watching, not Recommendations. Only the selected package's
@@ -172,3 +185,15 @@ Live metadata updates remain observed, with a two-second polling fallback. Playb
 back to normal wallpaper but keeps metadata loading alive and retries with 3/10/30-second backoff.
 Muted preview disables its own audio track. Sound from the separate background live app is still
 unattributed and is not claimed fixed. Xiaomi was unreachable during this pass; no TV was updated.
+
+## Artwork background revision, 1.76-inputs.12
+
+The latest owner instructions supersede the historical card layout and automatic two-row conflict
+rule described in earlier validation notes. The card shelf, recommendation text and dedicated remote
+focus route are removed. A regression test enables recommendations, switches to two rows and pins
+an input, then verifies the recommendation preference remains enabled and persisted. Artwork tests
+check wide-image coverage, aspect preservation/title space for portrait and square art, and safe
+fallback for unsupported image locations. Both release flavors build, 199 standard unit tests pass,
+and phone JavaScript plus all five translation tables pass checks. The owner is away from the TV:
+this revision has NOT been installed or visually/remote-tested on the real TV. No TV settings or
+third-party apps were changed for this revision.

@@ -266,7 +266,7 @@
     <string name="st_daily_shuffle">Daily picture button</string>
     <string name="st_daily_shuffle_hint">Show “Another wallpaper” only while a daily picture is selected.</string>
     <string name="st_app_previews">Video and music recommendations</string>
-    <string name="st_app_previews_hint">Show up to three items, refreshed every minute while selected.</string>
+    <string name="st_app_previews_hint">Use recommendation artwork as the background when an app is selected. Refresh every minute; keep the normal wallpaper when no artwork is available.</string>
     <string name="st_preview_sound">Preview sound</string>
     <string name="st_preview_sound_hint">Live previews are muted unless this is on.</string>
     <string name="content_sources">Inputs</string>
@@ -275,5 +275,4 @@
     <string name="content_live">Live</string>
     <string name="st_live_background">Live TV background preview</string>
     <string name="st_live_background_hint">Follow the live app’s last channel as a full-screen background. Missing or unavailable channels keep the normal wallpaper.</string>
-    <string name="st_previews_disabled_layout">Video and music recommendations were turned off because pinned inputs and two app rows are enabled.</string>
 </resources>
