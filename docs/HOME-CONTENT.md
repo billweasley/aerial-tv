@@ -234,7 +234,7 @@ The source classifier follows the documented Android TV program types and poster
 https://developer.android.com/reference/androidx/tvprovider/media/tv/TvContractCompat.PreviewProgramColumns
 
 Both release flavors and 203 unit tests pass; phone JavaScript and all five translation tables pass.
-Version 116 was installed in place on Xiaomi and compiled with speed. A captured frame confirmed
+Revision inputs.16 (versionCode 115) was installed in place on Xiaomi and compiled with speed. A captured frame confirmed
 full single-line Nintendo Switch and All Inputs labels, three spread source positions, and the
 normal wallpaper while All Inputs was focused. The attempted Bilibili visual sequence did not
 produce a valid Bilibili frame: the selected control was All Inputs and the TV subsequently entered
