@@ -126,3 +126,26 @@ This build has not been installed or exercised against the TV web endpoint.
 
 Source availability: https://github.com/mytv-android/mytv-android (current README); older upstream
 https://github.com/yaoxieyoulei/mytv-android/tree/feature/ui was inspected as historical context only.
+
+## Xiaomi verification of version 110, 2026-11-08
+
+Version 110 / 1.76-inputs.11 was installed in place on Xiaomi MFTR0 and compiled with speed.
+The existing mytv MainActivity was opened normally, activating its existing web service; no mytv
+APK, source subscription, or configuration was changed. A direct GET returned live channel data.
+
+Using the remote Down/Select sequence, the live player was switched to Shandong Satellite TV,
+then Home was pressed. Direct GET returned Shandong repeatedly at 2/4/6/8 seconds after Home,
+and the desktop screenshot showed the Shandong logo and moving program. The measured preview
+prepare-to-first-visible-frame time was 1301ms; this is not total Home-to-preview latency. A second
+remote switch yielded Jiangsu Satellite TV and the desktop screenshot also showed Jiangsu. Watch
+Next still named Sichuan, demonstrating that these previews followed direct state instead of the
+stale history record. One earlier API request timed out; transient service availability remains a
+fallback case. Ordinary Back/Exit with the web service destroyed is not validated by these tests.
+
+The separate audio issue is confirmed: while Aerial was focused and preview sound was off, the
+active AudioTrack belonged to mytv's `:player` process. No active Aerial AudioTrack appeared in that
+snapshot. Read-only configuration reported appBackgroundPlayEnable=false and appPipEnable=false.
+Thus a second mute change in Aerial cannot alone claim to fix that background player. Settings were
+not changed, and no audio-focus workaround or publisher patch was tested in this pass.
+
+Screenshots and raw package/audio diagnostics are private local artifacts, not committed here.
